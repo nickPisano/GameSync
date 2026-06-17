@@ -18,6 +18,11 @@ on:
   push:
     tags: ['v*']
 
+# The GITHUB_TOKEN must be able to create the release and upload assets.
+# (Repo default may be read-only; this grants write just for this workflow.)
+permissions:
+  contents: write
+
 jobs:
   release:
     strategy:
@@ -76,11 +81,13 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # macOS signing/notarization (no-ops if these secrets are unset):
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Ad-hoc sign on macOS ("-") when no Developer ID secret is set, so the
+          # build succeeds unsigned. Set the APPLE_SIGNING_IDENTITY secret to a
+          # real "Developer ID Application: …" value for a trusted build, and add
+          # APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID here for notarization (see
+          # docs/BUILDING.md). Don't pass those three empty — empty creds make
+          # notarization fail.
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '-' }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'GameSync ${{ github.ref_name }}'
