@@ -104,8 +104,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           arch=$(echo "${{ runner.arch }}" | tr 'A-Z' 'a-z')
-          exe=$(find target -path '*release/GameSync.exe' ! -path '*deps*' | head -n1)
-          if [ -z "$exe" ]; then echo "::error::portable GameSync.exe not found under target/"; exit 1; fi
-          out="GameSync_${{ github.ref_name }}_${arch}-portable.exe"
+          ver="${{ github.ref_name }}"; ver="${ver#v}"
+          # The compiled binary is the cargo bin name (gamesync-app), not the
+          # product name; Tauri only renames it inside the installers.
+          exe=$(find target -path '*release/gamesync-app.exe' ! -path '*deps*' | head -n1)
+          if [ -z "$exe" ]; then echo "::error::portable gamesync-app.exe not found under target/"; exit 1; fi
+          out="GameSync_${ver}_${arch}-portable.exe"
           cp "$exe" "$out"
           gh release upload "${{ github.ref_name }}" "$out" --clobber
