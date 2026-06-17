@@ -134,8 +134,11 @@ enters the host's address — and "keep both as a fork".
   ✅ rclone provider support (`RcloneRemote`), ✅ LAN peer-to-peer transport
   (`LanRemote` + `lan::serve`, host UI in Settings), ✅ conflict **diff preview**
   before resolving. Remaining: LAN host auto-discovery, "keep both as a fork".
-- **Phase 4:** security review, fault-injection tests, larger manifest, opt-in
-  telemetry, performance.
+- **Phase 4 (partly done):** ✅ **fault-injection tests** (a corrupt, missing, or
+  tampered CAS object aborts restore at the verify gate without touching the live
+  save, leaves no temp dirs, keeps the pre-restore safety snapshot recoverable,
+  and is flagged by `verify`), ✅ **larger manifest** + community game-list import
+  (Ludusavi). Remaining: security review, opt-in telemetry, performance.
 
 ## Encryption design (Phase 2)
 

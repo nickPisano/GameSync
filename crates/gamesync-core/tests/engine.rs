@@ -809,3 +809,207 @@ fn sync_toggle_persists_across_rescan() {
     let reloaded = engine.get_game(&game.id).unwrap();
     assert!(reloaded.sync_enabled);
 }
+
+// ---------------------------------------------------------------------------
+// Fault-injection tests for snapshot/restore.
+//
+// The whole point of the app is to never lose a save and never half-overwrite
+// the live one. These tests deliberately damage the content-addressed store
+// (corrupt or delete the objects a version depends on) and assert the engine
+// *fails closed*: it aborts at the verify gate before touching the live save,
+// leaves no half-finished temp dirs behind, keeps the automatic pre-restore
+// snapshot as a usable recovery point, and surfaces the damage via `verify`.
+// ---------------------------------------------------------------------------
+
+/// Absolute path of a stored CAS object (mirrors `Cas::object_path`).
+fn object_file(data_dir: &Path, hash: &str) -> PathBuf {
+    data_dir.join("store").join(&hash[..2]).join(hash)
+}
+
+/// Restore staging/rollback dirs that must never outlive a restore attempt.
+fn leftover_restore_temps(dir: &Path) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Ok(rd) = fs::read_dir(dir) {
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if name.starts_with(".gamesync-staging-") || name.starts_with(".gamesync-old-") {
+                out.push(name);
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn restore_aborts_on_corrupt_object_and_preserves_live_save() {
+    let (tmp, engine, save) = setup();
+    let data_dir = tmp.path().join("data");
+    let hero = save.join("hero.sav");
+
+    write(&hero, "good-v1");
+    let game = engine.add_manual_game("Faulty", save.clone()).unwrap();
+    let v1 = engine.backup(&game.id, BackupOptions::default()).unwrap();
+
+    // The live save moves on; this is the state a restore must never trash.
+    write(&hero, "current-state");
+
+    // Bit-rot: scribble over the v1 object so its bytes no longer match the hash.
+    let obj = object_file(&data_dir, &v1.files[0].hash);
+    assert!(obj.is_file(), "v1 object should exist before we corrupt it");
+    fs::write(&obj, b"this is not the original content").unwrap();
+
+    // Restore must fail closed at the staging/verify gate.
+    let err = engine
+        .restore(&game.id, &v1.version_id, false)
+        .expect_err("restoring a corrupt version must fail");
+    assert!(
+        err.to_string().contains("checksum"),
+        "expected a checksum failure, got: {err}"
+    );
+
+    // The live save is exactly as it was — the swap never happened.
+    assert_eq!(read(&hero), "current-state");
+    // No half-finished staging/old directories leaked next to the save.
+    assert!(
+        leftover_restore_temps(save.parent().unwrap()).is_empty(),
+        "restore must clean up its temp dirs on failure"
+    );
+}
+
+#[test]
+fn restore_aborts_on_missing_object_and_preserves_live_save() {
+    let (tmp, engine, save) = setup();
+    let data_dir = tmp.path().join("data");
+    let hero = save.join("hero.sav");
+
+    write(&hero, "good-v1");
+    let game = engine.add_manual_game("Gappy", save.clone()).unwrap();
+    let v1 = engine.backup(&game.id, BackupOptions::default()).unwrap();
+
+    write(&hero, "current-state");
+
+    // The object vanishes (partial sync, manual delete, disk loss).
+    fs::remove_file(object_file(&data_dir, &v1.files[0].hash)).unwrap();
+
+    let err = engine
+        .restore(&game.id, &v1.version_id, false)
+        .expect_err("restoring a version with a missing object must fail");
+    assert!(
+        err.to_string().contains("missing object"),
+        "expected a missing-object error, got: {err}"
+    );
+
+    assert_eq!(read(&hero), "current-state");
+    assert!(leftover_restore_temps(save.parent().unwrap()).is_empty());
+}
+
+#[test]
+fn failed_restore_remains_recoverable_via_safety_snapshot() {
+    // Even when the *target* version is unrecoverable, the pre-restore safety
+    // snapshot taken automatically before the attempt is a valid recovery point.
+    let (tmp, engine, save) = setup();
+    let data_dir = tmp.path().join("data");
+    let hero = save.join("hero.sav");
+
+    write(&hero, "good-v1");
+    let game = engine.add_manual_game("Recoverable", save.clone()).unwrap();
+    let v1 = engine.backup(&game.id, BackupOptions::default()).unwrap();
+
+    // Advance the live save, then corrupt the target so the restore fails
+    // *after* it has already captured a safety snapshot of this state.
+    write(&hero, "precious-current");
+    fs::write(object_file(&data_dir, &v1.files[0].hash), b"corrupted").unwrap();
+    assert!(engine.restore(&game.id, &v1.version_id, false).is_err());
+
+    // A pre-restore safety snapshot of "precious-current" must now exist.
+    let safety = engine
+        .versions(&game.id)
+        .unwrap()
+        .into_iter()
+        .find(|v| v.kind == SnapshotKind::PreRestore)
+        .expect("a pre-restore safety snapshot should have been captured");
+
+    // Simulate further loss of the live folder, then recover from the safety
+    // snapshot — the "undo a restore" path must still work end to end.
+    fs::remove_dir_all(&save).unwrap();
+    engine
+        .restore_with(
+            &game.id,
+            &safety.version_id,
+            RestoreOptions {
+                safety_snapshot: false,
+            },
+        )
+        .unwrap();
+    assert_eq!(read(&hero), "precious-current");
+}
+
+#[test]
+fn verify_detects_corrupt_and_missing_objects() {
+    let (tmp, engine, save) = setup();
+    let data_dir = tmp.path().join("data");
+    write(&save.join("a.sav"), "alpha");
+    write(&save.join("b.sav"), "bravo");
+    let game = engine.add_manual_game("Scanned", save.clone()).unwrap();
+    let v1 = engine.backup(&game.id, BackupOptions::default()).unwrap();
+
+    assert!(engine.verify().unwrap().ok(), "store should start healthy");
+
+    // Corrupt one object, delete another — verify must flag both by path.
+    let hash_of = |p: &str| {
+        v1.files
+            .iter()
+            .find(|f| f.rel_path == p)
+            .unwrap()
+            .hash
+            .clone()
+    };
+    fs::write(object_file(&data_dir, &hash_of("a.sav")), b"rot").unwrap();
+    fs::remove_file(object_file(&data_dir, &hash_of("b.sav"))).unwrap();
+
+    let report = engine.verify().unwrap();
+    assert!(!report.ok(), "verify must flag the damaged store");
+    let damaged: Vec<&str> = report.problems.iter().map(|(_, p, _)| p.as_str()).collect();
+    assert!(damaged.contains(&"a.sav"), "corrupt object not reported");
+    assert!(damaged.contains(&"b.sav"), "missing object not reported");
+}
+
+#[test]
+fn tampered_encrypted_object_is_rejected_by_verify_and_restore() {
+    // AEAD authentication must catch tampering with an encrypted object: both
+    // the integrity scan and a restore have to refuse the poisoned bytes.
+    let tmp = tempfile::tempdir().unwrap();
+    let data_dir = tmp.path().join("data");
+    let save = tmp.path().join("save");
+    fs::create_dir_all(&save).unwrap();
+
+    Engine::init_encryption(&data_dir, "correct horse battery staple").unwrap();
+    let engine = Engine::unlock(data_dir.clone(), "correct horse battery staple").unwrap();
+
+    write(&save.join("profile.sav"), "HP=100;LEVEL=7");
+    let game = engine.add_manual_game("Crypted", save.clone()).unwrap();
+    let v1 = engine.backup(&game.id, BackupOptions::default()).unwrap();
+    assert!(engine.verify().unwrap().ok());
+
+    // Flip a byte inside the encrypted blob (GSE1 || nonce || ciphertext+tag).
+    let obj = object_file(&data_dir, &v1.files[0].hash);
+    let mut bytes = fs::read(&obj).unwrap();
+    *bytes.last_mut().unwrap() ^= 0xff;
+    fs::write(&obj, &bytes).unwrap();
+
+    assert!(
+        !engine.verify().unwrap().ok(),
+        "AEAD must catch the tampered object"
+    );
+
+    write(&save.join("profile.sav"), "HP=1;LEVEL=99");
+    assert!(
+        engine.restore(&game.id, &v1.version_id, false).is_err(),
+        "restore must refuse a tampered encrypted object"
+    );
+    assert_eq!(
+        read(&save.join("profile.sav")),
+        "HP=1;LEVEL=99",
+        "the live save must be untouched after a refused restore"
+    );
+}
