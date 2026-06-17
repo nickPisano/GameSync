@@ -1,7 +1,13 @@
 name: Release
 
-# Build installable bundles for each OS and attach them to a draft GitHub
-# release. Trigger by pushing a version tag, e.g. `git tag v0.1.0 && git push --tags`.
+# Build installable + portable bundles for every OS/arch and attach them to a
+# draft GitHub release. Trigger by pushing a version tag:
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Produced per target:
+#   macOS  (universal arm64+x64) : .dmg (installer) + .app (portable, in the dmg)
+#   Windows x64 / arm64          : .msi + NSIS setup .exe (installers) + bare .exe (portable)
+#   Linux  x64 / arm64           : .deb + .rpm (installers) + .AppImage (portable)
 #
 # Code signing is opt-in via secrets (none required for an unsigned build):
 #   macOS:   APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
@@ -18,15 +24,29 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
-          - platform: ubuntu-latest
-          - platform: windows-latest
-    runs-on: ${{ matrix.platform }}
+          - name: macOS (universal)
+            os: macos-latest
+            rust-targets: aarch64-apple-darwin x86_64-apple-darwin
+            args: --target universal-apple-darwin
+          - name: Windows x64
+            os: windows-latest
+            args: ''
+          - name: Windows arm64
+            os: windows-11-arm
+            args: ''
+          - name: Linux x64
+            os: ubuntu-22.04
+            args: ''
+          - name: Linux arm64
+            os: ubuntu-22.04-arm
+            args: ''
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Linux WebView/Tauri deps
-        if: matrix.platform == 'ubuntu-latest'
+        if: startsWith(matrix.os, 'ubuntu')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -38,6 +58,11 @@ jobs:
             libssl-dev
 
       - uses: dtolnay/rust-toolchain@stable
+
+      - name: Add extra Rust targets
+        if: matrix.rust-targets != ''
+        run: rustup target add ${{ matrix.rust-targets }}
+
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with:
@@ -51,8 +76,29 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS signing/notarization (no-ops if these secrets are unset):
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'GameSync ${{ github.ref_name }}'
           releaseDraft: true
           prerelease: false
+          args: ${{ matrix.args }}
+
+      # tauri-action attaches the installers (.msi/.exe/.deb/.rpm/.AppImage/.dmg)
+      # but not the raw Windows executable, which is the "portable" build.
+      - name: Attach portable Windows .exe
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          arch=$(echo "${{ runner.arch }}" | tr 'A-Z' 'a-z')
+          exe=$(find target -path '*release/GameSync.exe' ! -path '*deps*' | head -n1)
+          if [ -z "$exe" ]; then echo "::error::portable GameSync.exe not found under target/"; exit 1; fi
+          out="GameSync_${{ github.ref_name }}_${arch}-portable.exe"
+          cp "$exe" "$out"
+          gh release upload "${{ github.ref_name }}" "$out" --clobber
