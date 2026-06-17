@@ -44,7 +44,7 @@ stateful logic in `gamesync-core` means the UI is just presentation + IPC.
 | `diff` | Compare two snapshots (added / removed / modified / unchanged). |
 | `retention` | Keep-last-N / keep-within-days pruning + reference-counted GC. |
 | `process` | Is the game running? Which install dirs are running (exit watcher)? Has the folder gone quiescent? |
-| `detection` | `vdf` parser, Steam discovery, `emulators`, per-OS `paths` expansion, bundled save-path `manifest`, and `ludusavi` (downloads/translates the ~17k-game community manifest). |
+| `detection` | `vdf` parser, Steam discovery, `gog` + `epic` store discovery, `emulators`, per-OS `paths` expansion, bundled save-path `manifest` (+ `name_index` for store-agnostic title matching), and `ludusavi` (downloads/translates the ~17k-game community manifest). |
 | `vclock` | Version-vector compare / merge / bump — the basis of conflict detection. |
 | `remote` | `Remote` trait + transports: `FolderRemote` (a folder), `RcloneRemote` (40+ cloud backends via rclone), `LanRemote`/`lan::serve` (peer-to-peer over TCP). |
 | `plugins` | Drop-in JSON plugins: game/emulator defs (merged into detection), hooks, file viewers. Command execution is opt-in. |
@@ -127,9 +127,9 @@ enters the host's address — and "keep both as a fork".
   wizard), and ✅ **first-run setup wizard** (mode → remote → encryption → scan &
   select games). Phase 1 is feature-complete.
 - **Phase 2 (engine done; rest pending):** ✅ client-side encryption,
-  ✅ emulator detection, ✅ retention/GC, ✅ version diff. Remaining: GOG/Epic
-  detection (needs a name-keyed manifest), signed auto-update, Linux/macOS
-  packaging, signed manifest auto-update — all need the app shell.
+  ✅ emulator detection, ✅ **GOG (Galaxy) + Epic detection** (name-matched into
+  the manifest), ✅ retention/GC, ✅ version diff. Remaining: signed auto-update,
+  Linux/macOS packaging, signed manifest auto-update — all need the app shell.
 - **Phase 3 (mostly done):** ✅ version-vector conflict model + resolution,
   ✅ rclone provider support (`RcloneRemote`), ✅ LAN peer-to-peer transport
   (`LanRemote` + `lan::serve`, host UI in Settings), ✅ conflict **diff preview**
@@ -167,9 +167,12 @@ orphan-delete bytes another version still needs.
 
 ## Notes / known limitations
 
-- Detection covers Steam, emulators, and manual add; the bundled manifests
-  (`crates/gamesync-core/manifests/{saves,emulators}.json`) are small starter
-  sets. GOG/Epic need a name-keyed manifest and are not wired in yet.
+- Detection covers Steam, GOG (Galaxy), Epic, emulators, and manual add. Steam
+  resolves saves by appid; GOG/Epic carry no appid locally, so they're matched
+  into the (appid-keyed) manifest by normalized title via `manifest::name_index`.
+  The bundled manifests (`crates/gamesync-core/manifests/{saves,emulators}.json`)
+  are small starter sets — `update-list` layers the ~17k-game community manifest
+  on top, which also widens GOG/Epic coverage.
 - `is_running` is a heuristic (process exe under the game's install dir); it
   returns false when the install dir is unknown (e.g. manually-added games and
   emulators), so quiescence settling is the backstop there.

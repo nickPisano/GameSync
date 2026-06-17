@@ -59,9 +59,10 @@ and select your games. You can **Skip** it and configure things later.
 
 After setup you land on the **library**. To add more games anytime:
 
-- **Scan** (top bar) — auto-detects installed **Steam** games with known save
-  paths and common **emulators** (Dolphin, PCSX2, RPCS3, PPSSPP, DuckStation,
-  RetroArch).
+- **Scan** (top bar) — auto-detects installed **Steam**, **GOG (Galaxy)**, and
+  **Epic** games with known save paths, plus common **emulators** (Dolphin,
+  PCSX2, RPCS3, PPSSPP, DuckStation, RetroArch). GOG/Epic saves are matched into
+  the game list by title (their stores carry no Steam appid).
 - **Add game** — for anything not detected: give it a name and **Browse…** to its
   save folder (or paste the path).
 

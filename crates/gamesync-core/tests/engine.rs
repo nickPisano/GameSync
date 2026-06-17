@@ -974,6 +974,101 @@ fn verify_detects_corrupt_and_missing_objects() {
     assert!(damaged.contains(&"b.sav"), "missing object not reported");
 }
 
+/// Drop a plugin that contributes a save rule for `game_name`, resolvable via
+/// `{INSTALL_DIR}/<sub>`, so GOG/Epic name-matching has something to hit
+/// deterministically (independent of the bundled manifest / OS dirs).
+fn plant_rule_plugin(tmp: &Path, appid: &str, game_name: &str, sub: &str) {
+    let plugins_dir = tmp.join("data/plugins");
+    fs::create_dir_all(&plugins_dir).unwrap();
+    fs::write(
+        plugins_dir.join("rule.json"),
+        format!(
+            r#"{{ "name": "Test rules", "games": {{ "{appid}": {{ "name": "{game_name}", "paths": ["{{INSTALL_DIR}}/{sub}"] }} }} }}"#
+        ),
+    )
+    .unwrap();
+}
+
+#[test]
+fn scans_gog_games_and_resolves_saves_by_name() {
+    let (tmp, engine, _save) = setup();
+    plant_rule_plugin(tmp.path(), "777", "Stardew Valley", "saves");
+
+    // A fake GOG library: <root>/StardewValley/{goggame-1.info, saves/}.
+    let root = tmp.path().join("GOG Games");
+    let install = root.join("StardewValley");
+    fs::create_dir_all(install.join("saves")).unwrap();
+    fs::write(
+        install.join("goggame-1971477531.info"),
+        r#"{"gameId":"1971477531","name":"Stardew Valley"}"#,
+    )
+    .unwrap();
+
+    let found = engine.scan_gog_in(&[root]).unwrap();
+    assert_eq!(found.len(), 1);
+    let g = &found[0];
+    assert_eq!(g.id, "gog:1971477531");
+    assert_eq!(g.platform, gamesync_core::Platform::Gog);
+    assert_eq!(g.name, "Stardew Valley", "name comes from the matched rule");
+    assert_eq!(g.save_root, install.join("saves"));
+
+    // Persisted, and a backup of the resolved save folder works end to end.
+    assert_eq!(
+        engine.get_game("gog:1971477531").unwrap().platform,
+        gamesync_core::Platform::Gog
+    );
+    write(&install.join("saves/slot1.dat"), "farm");
+    let v = engine
+        .backup("gog:1971477531", BackupOptions::default())
+        .unwrap();
+    assert_eq!(v.file_count(), 1);
+}
+
+#[test]
+fn scans_epic_games_and_resolves_saves_by_name() {
+    let (tmp, engine, _save) = setup();
+    plant_rule_plugin(tmp.path(), "888", "Hades", "SaveData");
+
+    let manifests = tmp.path().join("EpicManifests");
+    let install = tmp.path().join("EpicGames/Hades");
+    fs::create_dir_all(install.join("SaveData")).unwrap();
+    fs::create_dir_all(&manifests).unwrap();
+    fs::write(
+        manifests.join("ABCDEF0123.item"),
+        format!(
+            r#"{{"AppName":"Min","DisplayName":"Hades","InstallLocation":{:?}}}"#,
+            install.to_string_lossy()
+        ),
+    )
+    .unwrap();
+
+    let found = engine.scan_epic_in(&manifests).unwrap();
+    assert_eq!(found.len(), 1);
+    let g = &found[0];
+    assert_eq!(g.id, "epic:Min");
+    assert_eq!(g.platform, gamesync_core::Platform::Epic);
+    assert_eq!(g.name, "Hades");
+    assert_eq!(g.save_root, install.join("SaveData"));
+}
+
+#[test]
+fn unmatched_store_game_is_skipped() {
+    // A GOG game with no manifest entry (and no plugin rule) is not registered —
+    // we never guess a save folder we can't resolve.
+    let (tmp, engine, _save) = setup();
+    let root = tmp.path().join("GOG Games");
+    let install = root.join("ObscureIndie");
+    fs::create_dir_all(&install).unwrap();
+    fs::write(
+        install.join("goggame-555.info"),
+        r#"{"gameId":"555","name":"Totally Unknown Indie Game 9000"}"#,
+    )
+    .unwrap();
+
+    assert!(engine.scan_gog_in(&[root]).unwrap().is_empty());
+    assert!(engine.get_game("gog:555").is_err());
+}
+
 #[test]
 fn tampered_encrypted_object_is_rejected_by_verify_and_restore() {
     // AEAD authentication must catch tampering with an encrypted object: both

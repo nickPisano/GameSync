@@ -2,7 +2,7 @@
 //! the operations the UI/CLI call. It owns the DB connection and CAS, and is
 //! the single entry point for everything stateful.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -11,7 +11,7 @@ use crate::crypto::{Dek, KeyStore, RecoveryKey};
 use crate::db::Db;
 use crate::detection::emulators::EmulatorRule;
 use crate::detection::manifest::SaveRule;
-use crate::detection::{emulators, ludusavi, manifest, steam};
+use crate::detection::{emulators, epic, gog, ludusavi, manifest, steam};
 use crate::error::{Error, Result};
 use crate::model::{Game, Head, Platform, Snapshot, SnapshotKind};
 use crate::plugins;
@@ -374,9 +374,93 @@ impl Engine {
         Ok(found)
     }
 
-    /// Run all automatic detectors (Steam + emulators).
+    /// Scan GOG games under the default library roots ([`gog::library_roots`]).
+    /// Saves are resolved by matching each game's name into the save manifest.
+    pub fn scan_gog(&self) -> Result<Vec<Game>> {
+        self.scan_gog_in(&gog::library_roots())
+    }
+
+    /// Scan GOG games under explicit library roots. Exposed so callers can point
+    /// at non-default install locations (and for tests).
+    pub fn scan_gog_in(&self, roots: &[PathBuf]) -> Result<Vec<Game>> {
+        let index = manifest::name_index(&self.merged_game_rules());
+        let mut found = Vec::new();
+        for app in gog::apps_in(roots) {
+            let id = format!("gog:{}", app.game_id);
+            if let Some(game) =
+                self.register_named_game(&index, id, &app.name, app.install_dir, Platform::Gog)?
+            {
+                found.push(game);
+            }
+        }
+        Ok(found)
+    }
+
+    /// Scan Epic games from the launcher's manifests directory. Saves are
+    /// resolved by matching each game's display name into the save manifest.
+    pub fn scan_epic(&self) -> Result<Vec<Game>> {
+        match epic::manifests_dir() {
+            Some(dir) => self.scan_epic_in(&dir),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    /// Scan Epic games from an explicit manifests directory (and for tests).
+    pub fn scan_epic_in(&self, manifests_dir: &Path) -> Result<Vec<Game>> {
+        let index = manifest::name_index(&self.merged_game_rules());
+        let mut found = Vec::new();
+        for app in epic::apps_in(manifests_dir) {
+            let id = format!("epic:{}", app.app_name);
+            if let Some(game) =
+                self.register_named_game(&index, id, &app.name, app.install_dir, Platform::Epic)?
+            {
+                found.push(game);
+            }
+        }
+        Ok(found)
+    }
+
+    /// Resolve a detected game's save folder by matching its name into the
+    /// manifest, then upsert it (preserving the user's sync toggle). Returns
+    /// `None` when no rule matches or no save path resolves. Used by the GOG and
+    /// Epic scanners, which (unlike Steam) have no appid to key the manifest on.
+    fn register_named_game(
+        &self,
+        index: &HashMap<String, SaveRule>,
+        id: String,
+        detected_name: &str,
+        install_dir: PathBuf,
+        platform: Platform,
+    ) -> Result<Option<Game>> {
+        let Some(rule) = index.get(&manifest::normalize_name(detected_name)) else {
+            return Ok(None);
+        };
+        let Some(save_root) = manifest::resolve_in(rule, Some(&install_dir)) else {
+            return Ok(None);
+        };
+        let previous = self.db.get_game(&id).ok();
+        let game = Game {
+            id,
+            name: rule
+                .name
+                .clone()
+                .unwrap_or_else(|| detected_name.to_string()),
+            platform,
+            save_root,
+            install_dir: Some(install_dir),
+            includes: default_includes(),
+            excludes: default_excludes(),
+            sync_enabled: previous.map(|p| p.sync_enabled).unwrap_or(false),
+        };
+        self.db.upsert_game(&game)?;
+        Ok(Some(game))
+    }
+
+    /// Run all automatic detectors (Steam + GOG + Epic + emulators).
     pub fn scan_all(&self) -> Result<Vec<Game>> {
         let mut found = self.scan_steam()?;
+        found.extend(self.scan_gog()?);
+        found.extend(self.scan_epic()?);
         found.extend(self.scan_emulators()?);
         Ok(found)
     }
