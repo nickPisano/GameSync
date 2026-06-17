@@ -9,233 +9,363 @@ GameSync is a **desktop app** (a native window powered by Rust + a web UI). It
 runs locally and touches your real save folders and game processes, so it isn't
 a website — it has to run on your machine.
 
----
+## Contents
 
-## 1. Getting it running
-
-### Prerequisites
-
-You build it from source (no installer yet):
-
-- **Rust** (the `cargo` command) — install from <https://rustup.rs> or `brew install rust`.
-- **Node.js 18+** — from <https://nodejs.org> or `brew install node`.
-- **A C toolchain & system webview:**
-  - **macOS:** Xcode Command Line Tools (`xcode-select --install`). WebKit ships with macOS.
-  - **Windows:** the *Microsoft Visual C++ Build Tools* and the *WebView2 Runtime* (preinstalled on Windows 11).
-  - **Linux:** `webkit2gtk` + `libssl` dev packages (e.g. on Debian/Ubuntu: `libwebkit2gtk-4.1-dev build-essential libssl-dev libayatana-appindicator3-dev librsvg2-dev`).
-
-No database to set up — SQLite is bundled.
-
-### Run it (development)
-
-```sh
-npm install            # one time: install frontend deps
-npm run tauri dev      # build + launch the app (first build takes a few minutes)
-```
-
-The window opens automatically. The first compile is slow (it builds the whole
-webview stack); later launches are fast.
-
-### Build a distributable app (optional)
-
-```sh
-npm run tauri build    # installer/bundle for your OS in src-tauri/target/release/bundle
-```
-
-Icons are already set up (regenerate with `npm run tauri icon src-tauri/icons/icon.png`).
-Unsigned builds run locally but warn on other machines — see
-[`docs/BUILDING.md`](docs/BUILDING.md) for **code signing & notarization**
-(macOS / Windows), which needs your own certificates.
+- [Install & run](#install--run)
+- **Tutorials**
+  - [First-time setup](#tutorial-first-time-setup)
+  - [Find & add games](#tutorial-find--add-games) — Scan · Add game · Update game list
+  - [Back up & restore](#tutorial-back-up--restore) — Back up · Files · History · Compare · Restore
+  - [Manage games](#tutorial-manage-games) — Rename · Remove
+  - [Sync across devices](#tutorial-sync-across-devices) — Remote · Sync · rclone · LAN · Redirect · Conflicts
+  - [Automate it](#tutorial-automate-it) — Auto-sync · Backup-on-close · Tray
+  - [Protect your data](#tutorial-protect-your-data) — Encryption · Integrity · Storage/Retention/Compression
+  - [Customize it](#tutorial-customize-it) — Themes · Plugins
+- [Command-line tool](#command-line-tool)
+- [Where your data lives](#where-your-data-lives)
+- [Development](#development)
 
 ---
 
-## 2. How to use it
+## Install & run
 
-### First launch
+There's no installer yet — you build it from source (one-time setup, ~5 min plus
+a first compile).
 
-A short **setup wizard** walks you through it: choose local-only vs. cross-device
-sync → (if syncing) pick a shared folder → optionally turn on encryption → scan
-and select your games. You can **Skip** it and configure things later.
+### 1. Install the prerequisites
 
-After setup you land on the **library**. To add more games anytime:
+You need **Rust**, **Node.js 18+**, and your OS's C toolchain + system webview.
 
-- **Scan** (top bar) — auto-detects installed **Steam**, **GOG (Galaxy)**, and
-  **Epic** games with known save paths, plus common **emulators** (Dolphin,
-  PCSX2, RPCS3, PPSSPP, DuckStation, RetroArch). GOG/Epic saves are matched into
-  the game list by title (their stores carry no Steam appid).
-- **Add game** — for anything not detected: give it a name and **Browse…** to its
-  save folder (or paste the path).
+- **Rust** — install from <https://rustup.rs> (or `brew install rust`). Confirm with `cargo --version`.
+- **Node.js 18+** — from <https://nodejs.org> (or `brew install node`). Confirm with `node --version`.
+- **C toolchain + webview**, by OS:
+  - **macOS:** `xcode-select --install` (WebKit ships with macOS).
+  - **Windows:** *Microsoft Visual C++ Build Tools* and the *WebView2 Runtime* (preinstalled on Windows 11).
+  - **Linux (Debian/Ubuntu):** `sudo apt install libwebkit2gtk-4.1-dev build-essential libssl-dev libayatana-appindicator3-dev librsvg2-dev`
 
-GameSync ships with a small curated game list. **Settings → Game detection →
-Update game list** downloads the community manifest (PCGamingWiki via Ludusavi,
-~17,000 games) so Scan recognizes far more titles. (CLI: `gamesync update-list`.)
+No database to install — SQLite is bundled.
 
-Each game appears as a card showing its platform, save path, version count, and
-last backup time. Each card also has **Rename** and **Remove** (removing deletes
-the game's backup history in GameSync but never touches your actual save files).
+### 2. Get the code
 
-### Backing up and restoring
+```sh
+git clone https://github.com/nickPisano/GameSync.git
+cd GameSync
+npm install            # one time: install the frontend dependencies
+```
 
-- **Back up** on a card takes an immediate snapshot. Snapshots are
-  content-addressed and deduplicated, so unchanged files cost nothing.
-- **History** opens the version timeline. From there you can:
-  - **Restore** any version — GameSync first takes a *safety snapshot* of your
-    current save, then atomically swaps the chosen version in. A restore is
-    always itself undoable.
-  - **Compare** two versions to see exactly which files were added, changed, or
-    removed.
+### 3. Run it
 
-GameSync refuses to back up a game it detects as running (to avoid capturing a
-half-written save).
+```sh
+npm run tauri dev      # builds + launches the app window
+```
 
-### Browsing save files
+The first compile builds the whole webview stack and takes a few minutes; later
+launches are fast. The window opens automatically.
 
-Click **Files** on a game to see exactly which files are in its save folder
-(name, size, last modified). **Open save folder** opens it in your file manager,
-and **Reveal** next to any file jumps right to it.
+### 4. (Optional) Build a standalone app
 
-### Syncing across devices
+```sh
+npm run tauri build    # release bundle/installer for your OS
+```
 
-GameSync syncs by replicating to a **shared folder** — point each of your
-devices at the *same* folder inside something you already sync (Dropbox, Google
-Drive, OneDrive, a network share):
+The output lands in **`target/release/bundle/`** (e.g. `…/bundle/macos/GameSync.app`
+and a `.dmg` on macOS; an `.msi`/`.exe` on Windows; an `.AppImage`/`.deb` on Linux).
+Unsigned builds run on your machine but warn on others — see
+[`docs/BUILDING.md`](docs/BUILDING.md) for **code signing & notarization**, which
+needs your own developer certificates.
 
-1. In the **Remote** bar, **Browse…** to that folder (or paste the path) and click **Save**.
-2. Toggle **Sync** on for each game you want to sync.
-3. Click **Sync now** on a card, or **Sync all** in the top bar.
+> Icons are already wired up; regenerate them with `npm run tauri icon src-tauri/icons/icon.png`.
 
-Do the same on your other device (point it at the same folder, add the same
-games). Sync figures out the rest:
+---
 
-- If you're ahead, it **pushes**.
-- If the other device is ahead, it **pulls** and restores into your save folder.
-- If both changed independently, it reports a **conflict** (see below).
+## Tutorial: First-time setup
 
-> Tip: for an automatically-detected game (Steam/emulator), the two devices
-> agree on identity automatically. For a **manually-added** game, give it the
-> **same name** on both devices so they match.
+On first launch a 4-step **setup wizard** appears:
 
-**Direct cloud (no shared folder):** if you have [rclone](https://rclone.org)
-installed and configured (`rclone config`), set the remote to
-`rclone:<remote>:<path>` — e.g. `rclone:gdrive:GameSync` — to sync straight to
-Google Drive, S3, Dropbox, B2, OneDrive, and 40+ other backends.
+1. **Choose a mode** — local-only backups, or cross-device sync.
+2. **Pick a sync folder** (only if syncing) — a folder inside something you
+   already sync (Dropbox/Drive/OneDrive/network share). Use the *same* folder on
+   every device.
+3. **Encryption** (optional) — turn on zero-knowledge encryption and save the
+   recovery key.
+4. **Scan & select** — GameSync detects installed games; tick the ones to track.
 
-**Redirect a save folder (advanced, live sync):** a game card's **Redirect to
-synced folder** moves that game's save folder into a folder you pick (e.g. your
-OneDrive/Drive folder) and leaves a **symlink** behind so the game still finds
-its saves — the cloud client then syncs them live. GameSync takes a backup
-first, keeps your original folder (renamed, not deleted), verifies the link, and
-rolls back on failure. On Windows this needs Developer Mode or admin rights to
-create the link. This is independent of GameSync's own snapshot sync.
+Prefer to dive in? Click **Skip setup** at any step and configure things later
+from the toolbar. Either way you land on the **library**, where each game is a
+card showing its platform, save path, version count, and last-backup time.
 
-**LAN (peer-to-peer, no cloud):** on one device, open **Settings → LAN sync →
-Host on this network**. It shows a connect string like
-`lan:<token>@192.168.1.5:51234`. On your other device, paste that into the
-**Remote** bar and sync — saves transfer directly between the two machines.
-(From the CLI: `gamesync serve-lan` on the host, then
-`gamesync remote set lan:<token>@<host>:<port>` on the peer. Auto-discovery of
-hosts is a planned follow-up; for now you enter the address shown by the host.)
+---
 
-### Conflicts
+## Tutorial: Find & add games
+
+### Auto-detect installed games (Scan)
+
+1. Click **Scan** in the toolbar.
+2. GameSync detects installed **Steam**, **GOG (Galaxy)**, and **Epic** games
+   with known save paths, plus common **emulators** (Dolphin, PCSX2, RPCS3,
+   PPSSPP, DuckStation, RetroArch).
+3. Detected games appear as cards. (GOG/Epic games are matched to save paths by
+   title, since those stores carry no Steam app id.)
+
+### Add a game manually
+
+For anything not auto-detected:
+
+1. Click **Add game**.
+2. Enter a **Name**.
+3. Set the **Save folder** — click **Browse…** to pick it, or paste the path.
+4. *(Optional)* Set the **Game folder or app** so GameSync can back up
+   automatically when that game closes.
+5. Click **Add game**. It appears in your library.
+
+### Recognize more games (Update game list)
+
+GameSync ships with a small curated list. To recognize thousands more:
+
+1. Open **Settings → Game detection**.
+2. Click **Update game list** — it downloads the community manifest
+   (PCGamingWiki via Ludusavi, ~17,000 games).
+3. The detected-game count updates. Run **Scan** again to pick up newly
+   recognized titles. *(CLI: `gamesync update-list`.)*
+
+---
+
+## Tutorial: Back up & restore
+
+### Back up now
+
+1. On a game card, click **Back up**.
+2. GameSync snapshots the save folder and shows e.g. *"Backed up 3 file(s)."*
+   Snapshots are content-addressed and **deduplicated**, so unchanged files cost
+   no extra space, and transient junk (`*.tmp`, `*.bak`, `.DS_Store`, …) is
+   excluded automatically.
+
+> GameSync refuses to back up a game it detects as **running**, to avoid
+> capturing a half-written save.
+
+### Browse the save files (Files)
+
+1. Click **Files** on a card.
+2. See every file in the save folder with its size and last-modified time.
+3. Click **Open save folder** to open it in your file manager, or **Reveal**
+   next to any file to jump straight to it.
+
+### View history & compare versions
+
+1. Click **History** on a card to open the version timeline.
+2. Each version shows a short id, a tag (`manual`, `auto`, or `pre_restore`),
+   file count, size, and age.
+3. To compare two versions, pick them in the **Compare versions** dropdowns and
+   click **Compare** — you'll see exactly which files were **added (+)**,
+   **changed (~)**, or **removed (−)**.
+
+### Restore a version
+
+1. Open **History** and click **Restore** on the version you want.
+2. GameSync first takes an automatic **safety snapshot** of your *current* save
+   (tagged `pre_restore`), then atomically swaps in the chosen version. You'll
+   see *"Restored. A safety snapshot of the previous save was taken."*
+3. Changed your mind? Restore the `pre_restore` snapshot to undo — every restore
+   is itself undoable.
+
+> A restore makes the folder match the snapshot exactly, so files that were
+> **excluded** from backups (e.g. `*.tmp`) are not preserved across a restore.
+
+---
+
+## Tutorial: Manage games
+
+### Rename a game
+
+1. Click **Rename** on the card.
+2. Type a new name and click **Save**.
+
+### Remove a game
+
+1. Click **Remove** on the card and confirm.
+2. This deletes the game's **backup history inside GameSync** and reclaims its
+   storage. **Your actual save files on disk are never touched.**
+
+---
+
+## Tutorial: Sync across devices
+
+GameSync syncs by replicating snapshots to a **shared folder** that each device
+can reach. (Conflict resolution needs no server — it's peer-to-peer.)
+
+### Set up a shared-folder remote
+
+1. In the **Remote** bar, click **Browse…** and pick a folder inside a service
+   you already sync (Dropbox/Drive/OneDrive/network share), or paste its path.
+2. Click **Save** — the status flips to *configured*.
+3. Toggle **Sync** on for each game you want to sync.
+
+### Sync
+
+1. Click **Sync now** on a card, or **Sync all** in the toolbar.
+2. GameSync **pushes** if you're ahead, **pulls** (and restores) if the other
+   device is ahead, or reports **InSync** if nothing changed.
+3. Repeat the setup on your other device: point it at the *same* folder and add
+   the same games.
+
+> For auto-detected games the two devices agree on identity automatically. For a
+> **manually-added** game, give it the **same name** on both devices so they match.
+
+### Sync straight to a cloud provider (rclone)
+
+If you have [rclone](https://rclone.org) installed and configured (`rclone config`):
+
+1. In the **Remote** bar, enter `rclone:<remote>:<path>` — e.g.
+   `rclone:gdrive:GameSync`.
+2. Click **Save** and sync as above. Works with Google Drive, S3, Dropbox, B2,
+   OneDrive, and 40+ other backends.
+
+### Sync over your local network (LAN, no cloud)
+
+1. On the **host** device, open **Settings → LAN sync → Host on this network**.
+2. Copy the connect string it shows, e.g. `lan:<token>@192.168.1.5:51234`.
+3. On the **other** device, paste that into the **Remote** bar and sync — saves
+   transfer directly between the two machines.
+
+*(CLI: `gamesync serve-lan` on the host, then
+`gamesync remote set lan:<token>@<host>:<port>` on the peer.)*
+
+### Live-sync via your cloud client (Redirect to synced folder)
+
+This makes the cloud client (not GameSync) sync the live files:
+
+1. On a card, click **Redirect to synced folder** and pick a destination (e.g.
+   your OneDrive/Drive folder).
+2. GameSync backs the game up first, **moves** the save folder into the
+   destination, and leaves a **symlink** behind so the game still finds its
+   saves. Your original folder is kept (renamed, never deleted), and the move
+   rolls back on failure.
+
+> On Windows this needs Developer Mode or admin rights to create the link. This
+> is independent of GameSync's own snapshot sync.
+
+### Resolve a conflict
 
 If you played the same game on two devices without syncing in between, GameSync
-detects it and shows a **conflict banner**. Your live save is **never
-overwritten**. Click **Preview changes** to see exactly which files differ
-between your save and the other device's before deciding, then choose:
+shows a **conflict banner** and **never overwrites your live save**:
 
-- **Keep mine** — your version wins.
-- **Take remote** — the other device's version wins (your current save is still
-  backed up first).
+1. Click **Preview changes** to see which files differ between your save and the
+   other device's.
+2. Choose **Keep mine** (your version wins) or **Take remote** (the other
+   device's version wins — your current save is backed up first).
+3. Both versions stay in history, and the resolution supersedes both branches so
+   the other device converges on its next sync.
 
-Either way both versions stay in history, and the resolution supersedes both
-branches so the other device converges on the next sync.
+---
 
-### Automatic sync + system tray
+## Tutorial: Automate it
 
-Open **Settings** → **Automatic sync**:
+### Automatic background sync
 
-- Turn it on and set an interval (minutes).
-- GameSync will, in the background, back up any changed saves and sync enabled
-  games on that schedule. Running games are skipped; conflicts are reported, not
-  auto-resolved.
-- **Back up automatically when a game closes** (on by default) — GameSync notices
-  when a tracked game exits, waits a moment for the save to flush, then backs it
-  up (and syncs it if set up). Exit detection works for games with a known
-  install location (e.g. Steam); manual/emulator games use the timer or manual
-  backup.
+1. Open **Settings → Automatic sync**.
+2. Tick **"Automatically back up & sync enabled games in the background"** and
+   set an interval (minutes).
+3. GameSync now backs up changed saves and syncs enabled games on that schedule.
+   Running games are skipped; conflicts are reported, not auto-resolved.
 
-The app lives in the **system tray**:
+### Back up automatically when a game closes
 
-- **Closing the window hides it to the tray** so background auto-sync keeps
+- In **Settings → Automatic sync**, **"Back up automatically when a game closes"**
+  is **on by default**. GameSync notices when a tracked game exits, waits for the
+  save to flush, then backs it up (and syncs it if configured). Exit detection
+  needs a known install location (e.g. Steam, or a manual game with its app set);
+  manual/emulator games without one rely on the timer or manual backup.
+
+### System tray
+
+- **Closing the window hides GameSync to the tray** so background sync keeps
   running.
 - The tray menu has **Open GameSync**, **Sync all now**, and **Quit GameSync**.
   Use **Quit** to fully exit.
 
-### Encryption (optional)
+---
 
-To encrypt everything GameSync stores (and uploads) with zero-knowledge
-encryption:
+## Tutorial: Protect your data
 
-1. **Enable encryption** (top bar) on a fresh store. Choose a passphrase.
-2. **Save the recovery key it shows you** — it appears only once and can unlock
-   your saves if you forget the passphrase. Without the passphrase *and* the
-   recovery key, encrypted saves cannot be recovered.
+### Enable encryption (zero-knowledge)
 
-After that, the app asks for your passphrase on launch. For encrypted sync, all
-devices must use the **same passphrase/keystore**.
+Encrypts everything GameSync stores and uploads.
 
-### Integrity check
+1. **Do this before backing up any games** — encryption can only be enabled on a
+   store with no backups yet.
+2. Click **Enable encryption** in the toolbar.
+3. Enter a **passphrase** (min 8 chars) twice and click **Enable**.
+4. **Save the recovery key it shows you** — it appears only **once** and can
+   unlock your saves if you forget the passphrase. Losing both the passphrase
+   *and* the recovery key means the data is unrecoverable (that's the point).
+5. From now on the app asks for your passphrase on launch (**Unlock** screen).
+   For encrypted *sync*, use the **same passphrase/keystore** on every device.
 
-**Settings → Integrity → Verify all data** re-hashes every stored object
-(decrypting first when encrypted) and reports any corruption.
+### Verify nothing is corrupt (Integrity)
 
-### Storage & retention
+1. Open **Settings → Integrity**.
+2. Click **Verify all data** — it re-hashes every stored object (decrypting first
+   when encrypted) and reports `OK` or lists any corruption.
 
-**Settings → Storage** shows how much space backups use (total and per game,
-deduplicated). Set a retention policy — keep the newest *N* versions, and
-optionally anything from the last *D* days — and **Apply & clean up** prunes
-older versions across all games and reclaims the space. **Reclaim unused space**
-runs garbage collection on its own.
+### Manage storage, retention & compression
 
-**Compress backups** (also in Storage) stores objects with **LZMA2** (the 7-Zip
-compression codec), which shrinks both your local backups and the data uploaded
-to a synced folder / sent over LAN. It composes with encryption (compress, then
-encrypt) and can be turned on before you take any backups. Note: this compresses
-*stored backups* — a **redirected (symlinked) folder** holds the live files the
-game reads, so it stays uncompressed by necessity.
-
-### Plugins
-
-Open **Plugins** to extend GameSync with drop-in `.json` files: add games or
-emulator save paths to detection, run **hooks** before/after a backup or restore,
-or register **file viewers** that open matching saves with an external tool.
-Game/emulator definitions are pure data; hooks and viewers run commands, so they
-only execute after you enable **"Allow plugins to run commands"** (off by
-default). See [`docs/PLUGINS.md`](docs/PLUGINS.md) for the format.
-
-### Where your data lives
-
-Backups and metadata are stored in your OS app-data directory (shown in the
-status bar at the bottom of the window):
-
-- macOS: `~/Library/Application Support/dev.GameSync.GameSync/` (or `com.gamesync.desktop`)
-- Windows: `%APPDATA%\GameSync\`
-- Linux: `~/.local/share/GameSync/`
-
-Your **original save folders are the source of truth** — GameSync only ever
-copies *out* of them (for backup) and writes *into* them (on restore, after a
-safety snapshot).
+1. Open **Settings → Storage** to see space used (total and per game,
+   deduplicated).
+2. **Retention:** set "keep newest *N* versions" and optionally "anything from
+   the last *D* days," then click **Apply & clean up** to prune older versions
+   across all games. **Reclaim unused space** runs garbage collection on its own.
+3. **Compress backups** (LZMA2 / 7-Zip codec) shrinks stored backups and synced
+   data; it composes with encryption (compress, then encrypt). It can only be
+   toggled **before** any backups exist. *(A redirected/symlinked folder holds
+   the live files the game reads, so it stays uncompressed.)*
 
 ---
 
-## 3. Command-line tool (optional)
+## Tutorial: Customize it
+
+### Change the theme
+
+1. Open **Settings → Appearance**.
+2. Click a built-in swatch — **Midnight**, **Light**, **Forest**, or **Grape** —
+   it applies instantly.
+3. For more options use the **More themes…** dropdown, which includes **Auto**
+   (follow your OS light/dark setting) and any custom themes you've imported.
+
+### Import a custom theme
+
+1. Open **Settings → Appearance → Import…**.
+2. Paste a theme as JSON: a `name` plus a `colors` object with the keys `bg`,
+   `panel`, `panel-2`, `border`, `text`, `muted`, `accent`, `accent-hover`,
+   `ok`, `err`, `warn`. (A filled-in template is pre-loaded — edit it.)
+3. Click **Import**. It applies immediately and joins the **More themes…**
+   dropdown.
+4. To delete a custom theme, select it in **More themes…** and click **Remove**.
+
+### Plugins
+
+Extend GameSync with drop-in `.json` files:
+
+1. Open **Plugins**, then **Open folder** and drop a `.json` plugin in.
+2. Click **Reload**. A plugin can add games/emulator save paths to detection,
+   run **hooks** before/after backup or restore, or register **file viewers**
+   that open matching saves with an external tool.
+3. Game/emulator definitions are pure data and always apply. Hooks and viewers
+   run shell commands, so they only execute after you tick **"Allow plugins to
+   run commands"** (off by default).
+
+See [`docs/PLUGINS.md`](docs/PLUGINS.md) for the file format.
+
+---
+
+## Command-line tool
 
 A headless CLI mirrors the engine — handy for scripting, servers, or quick
 checks. Build it with `cargo build -p gamesync-cli` (binary at
 `target/debug/gamesync`):
 
 ```sh
-gamesync scan                          # detect Steam games + emulators
+gamesync scan                          # detect Steam/GOG/Epic games + emulators
+gamesync update-list                   # download the ~17k-game community list
 gamesync add "My RPG" /path/to/saves   # track a game manually
 gamesync list                          # tracked games + status
 gamesync backup <game_id>              # snapshot now
@@ -243,10 +373,11 @@ gamesync versions <game_id>            # history
 gamesync diff <game_id> <v1> <v2>      # what changed
 gamesync restore <game_id> <ver_id>    # restore (safety snapshot taken first)
 gamesync prune <game_id> --keep 20 --days 30   # retention + reclaim storage
-gamesync remote set /path/to/shared/folder
+gamesync verify                        # integrity check
+gamesync remote set /path/to/shared/folder     # or rclone:<remote>:<path>
+gamesync serve-lan                     # host LAN sync on this machine
 gamesync sync <game_id>                # push / pull / report conflict
 gamesync resolve <game_id> --keep local   # or --keep remote
-gamesync verify                        # integrity check
 gamesync help
 ```
 
@@ -255,7 +386,22 @@ Environment: `GAMESYNC_DATA` overrides the data dir; `GAMESYNC_PASSPHRASE` /
 
 ---
 
-## 4. Development
+## Where your data lives
+
+Backups and metadata live in your OS app-data directory (shown in the status bar
+at the bottom of the window):
+
+- **macOS:** `~/Library/Application Support/dev.GameSync.GameSync/`
+- **Windows:** `%APPDATA%\GameSync\`
+- **Linux:** `~/.local/share/GameSync/`
+
+Your **original save folders are the source of truth** — GameSync only ever
+copies *out* of them (for backup) and writes *into* them (on restore, after a
+safety snapshot).
+
+---
+
+## Development
 
 ```sh
 cargo test --workspace      # run the engine test suite
