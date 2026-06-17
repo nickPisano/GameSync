@@ -1,0 +1,60 @@
+{
+  "_comment": "Starter save-path manifest for GameSync. Keys are Steam appids. Paths are templates expanded per-OS; the first template whose placeholders resolve AND which exists on disk wins, otherwise the first resolvable template is used as a suggestion. Placeholders: {APPDATA} {LOCALAPPDATA} {DOCUMENTS} {SAVEDGAMES} {HOME} {USERPROFILE} {APPSUPPORT} {XDG_DATA} {XDG_CONFIG} {INSTALL_DIR}. Paths are best-effort and Windows-leaning; users can override per game, and unknown games can be added via plugins. A wrong path simply won't match (it must exist to be auto-selected).",
+  "version": 2,
+  "games": {
+    "335300": { "name": "Dark Souls II: Scholar of the First Sin", "paths": ["{APPDATA}/DarkSoulsII"] },
+    "374320": { "name": "Dark Souls III", "paths": ["{APPDATA}/DarkSoulsIII"] },
+    "570940": { "name": "Dark Souls: Remastered", "paths": ["{APPDATA}/DarkSoulsRemastered"] },
+    "211420": { "name": "Dark Souls: Prepare to Die Edition", "paths": ["{DOCUMENTS}/NBGI/DARK SOULS"] },
+    "814380": { "name": "Sekiro: Shadows Die Twice", "paths": ["{APPDATA}/Sekiro"] },
+    "1245620": { "name": "Elden Ring", "paths": ["{APPDATA}/EldenRing"] },
+    "1888160": { "name": "Armored Core VI", "paths": ["{APPDATA}/ArmoredCore6"] },
+    "485510": { "name": "Nioh", "paths": ["{DOCUMENTS}/KoeiTecmo/NIOH"] },
+
+    "72850": { "name": "The Elder Scrolls V: Skyrim", "paths": ["{DOCUMENTS}/My Games/Skyrim/Saves"] },
+    "489830": { "name": "Skyrim Special Edition", "paths": ["{DOCUMENTS}/My Games/Skyrim Special Edition/Saves"] },
+    "22330": { "name": "The Elder Scrolls IV: Oblivion", "paths": ["{DOCUMENTS}/My Games/Oblivion/Saves"] },
+    "377160": { "name": "Fallout 4", "paths": ["{DOCUMENTS}/My Games/Fallout4/Saves"] },
+    "22380": { "name": "Fallout: New Vegas", "paths": ["{DOCUMENTS}/My Games/FalloutNV/Saves"] },
+    "22300": { "name": "Fallout 3", "paths": ["{DOCUMENTS}/My Games/Fallout3/Saves"] },
+    "1716740": { "name": "Starfield", "paths": ["{DOCUMENTS}/My Games/Starfield/Saves"] },
+
+    "292030": { "name": "The Witcher 3: Wild Hunt", "paths": ["{DOCUMENTS}/The Witcher 3/gamesaves"] },
+    "20920": { "name": "The Witcher 2", "paths": ["{DOCUMENTS}/Witcher 2/gamesaves"] },
+    "1091500": { "name": "Cyberpunk 2077", "paths": ["{SAVEDGAMES}/CD Projekt Red/Cyberpunk 2077"] },
+
+    "1086940": { "name": "Baldur's Gate 3", "paths": ["{LOCALAPPDATA}/Larian Studios/Baldur's Gate 3/PlayerProfiles"] },
+    "435150": { "name": "Divinity: Original Sin 2", "paths": ["{LOCALAPPDATA}/Larian Studios/Divinity Original Sin 2 Definitive Edition/PlayerProfiles"] },
+
+    "203770": { "name": "Crusader Kings II", "paths": ["{DOCUMENTS}/Paradox Interactive/Crusader Kings II/save games"] },
+    "1158310": { "name": "Crusader Kings III", "paths": ["{DOCUMENTS}/Paradox Interactive/Crusader Kings III/save games"] },
+    "281990": { "name": "Stellaris", "paths": ["{DOCUMENTS}/Paradox Interactive/Stellaris/save games"] },
+    "236850": { "name": "Europa Universalis IV", "paths": ["{DOCUMENTS}/Paradox Interactive/Europa Universalis IV/save games"] },
+    "394360": { "name": "Hearts of Iron IV", "paths": ["{DOCUMENTS}/Paradox Interactive/Hearts of Iron IV/save games"] },
+
+    "8930": { "name": "Sid Meier's Civilization V", "paths": ["{DOCUMENTS}/My Games/Sid Meier's Civilization 5/Saves"] },
+    "289070": { "name": "Sid Meier's Civilization VI", "paths": ["{DOCUMENTS}/My Games/Sid Meier's Civilization VI/Saves"] },
+    "268500": { "name": "XCOM 2", "paths": ["{DOCUMENTS}/My Games/XCOM2/XComGame/SaveData"] },
+    "200510": { "name": "XCOM: Enemy Unknown", "paths": ["{DOCUMENTS}/My Games/XCOM - Enemy Unknown/XComGame/SaveData"] },
+
+    "413150": { "name": "Stardew Valley", "paths": ["{APPDATA}/StardewValley/Saves", "{HOME}/.config/StardewValley/Saves"] },
+    "105600": { "name": "Terraria", "paths": ["{DOCUMENTS}/My Games/Terraria", "{APPSUPPORT}/Terraria", "{HOME}/.local/share/Terraria"] },
+    "427520": { "name": "Factorio", "paths": ["{APPDATA}/Factorio/saves", "{APPSUPPORT}/factorio/saves", "{HOME}/.factorio/saves"] },
+    "367520": { "name": "Hollow Knight", "paths": ["{USERPROFILE}/AppData/LocalLow/Team Cherry/Hollow Knight", "{APPSUPPORT}/unity.Team Cherry.Hollow Knight", "{HOME}/.config/unity3d/Team Cherry/Hollow Knight"] },
+    "892970": { "name": "Valheim", "paths": ["{USERPROFILE}/AppData/LocalLow/IronGate/Valheim", "{HOME}/.config/unity3d/IronGate/Valheim"] },
+    "294100": { "name": "RimWorld", "paths": ["{USERPROFILE}/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Saves", "{APPSUPPORT}/RimWorld by Ludeon Studios/Saves", "{HOME}/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Saves"] },
+    "632360": { "name": "Risk of Rain 2", "paths": ["{USERPROFILE}/AppData/LocalLow/Hopoo Games, LLC/Risk of Rain 2"] },
+    "1145360": { "name": "Hades", "paths": ["{DOCUMENTS}/Saved Games/Hades", "{APPSUPPORT}/Supergiant Games/Hades"] },
+    "881100": { "name": "Noita", "paths": ["{USERPROFILE}/AppData/LocalLow/Nolla_Games_Noita/save00"] },
+    "646570": { "name": "Slay the Spire", "paths": ["{INSTALL_DIR}/saves"] },
+    "268910": { "name": "Cuphead", "paths": ["{USERPROFILE}/AppData/LocalLow/StudioMDHR Entertainment/Cuphead"] },
+    "219740": { "name": "Don't Starve", "paths": ["{DOCUMENTS}/Klei/DoNotStarve"] },
+    "322330": { "name": "Don't Starve Together", "paths": ["{DOCUMENTS}/Klei/DoNotStarveTogether"] },
+    "255710": { "name": "Cities: Skylines", "paths": ["{USERPROFILE}/AppData/LocalLow/Colossal Order/Cities_Skylines/Saves"] },
+
+    "49520": { "name": "Borderlands 2", "paths": ["{DOCUMENTS}/My Games/Borderlands 2/WillowGame/SaveData"] },
+    "8980": { "name": "Borderlands GOTY", "paths": ["{DOCUMENTS}/My Games/Borderlands/WillowGame/SaveData"] },
+    "204360": { "name": "Castle Crashers", "paths": ["{INSTALL_DIR}"] },
+    "239200": { "name": "Amnesia: A Machine for Pigs", "paths": ["{HOME}/.local/share/Amnesia/Pig", "{APPDATA}/../Local/Amnesia/Pig"] }
+  }
+}

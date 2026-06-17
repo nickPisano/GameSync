@@ -1,0 +1,85 @@
+{
+  "_comment": "Emulator save-location manifest. Unlike per-game Steam saves, emulators keep all saves in one place, so each entry resolves to a single save root. The first template that resolves AND exists wins. Placeholders are expanded per-OS (see detection/paths.rs).",
+  "version": 1,
+  "emulators": {
+    "dolphin": {
+      "name": "Dolphin (GameCube/Wii)",
+      "paths": [
+        "{DOCUMENTS}/Dolphin Emulator",
+        "{APPSUPPORT}/Dolphin",
+        "{XDG_DATA}/dolphin-emu"
+      ]
+    },
+    "pcsx2": {
+      "name": "PCSX2 (PlayStation 2)",
+      "paths": [
+        "{DOCUMENTS}/PCSX2/memcards",
+        "{APPSUPPORT}/PCSX2/memcards",
+        "{XDG_CONFIG}/PCSX2/memcards"
+      ]
+    },
+    "rpcs3": {
+      "name": "RPCS3 (PlayStation 3)",
+      "paths": [
+        "{APPSUPPORT}/rpcs3/dev_hdd0/home",
+        "{XDG_CONFIG}/rpcs3/dev_hdd0/home"
+      ]
+    },
+    "ppsspp": {
+      "name": "PPSSPP (PSP)",
+      "paths": [
+        "{DOCUMENTS}/PPSSPP/PSP/SAVEDATA",
+        "{APPSUPPORT}/PPSSPP/PSP/SAVEDATA",
+        "{XDG_DATA}/ppsspp/PSP/SAVEDATA"
+      ]
+    },
+    "duckstation": {
+      "name": "DuckStation (PlayStation 1)",
+      "paths": [
+        "{DOCUMENTS}/DuckStation/memcards",
+        "{APPSUPPORT}/DuckStation/memcards",
+        "{XDG_CONFIG}/duckstation/memcards"
+      ]
+    },
+    "retroarch": {
+      "name": "RetroArch",
+      "paths": [
+        "{APPDATA}/RetroArch/saves",
+        "{APPSUPPORT}/RetroArch/saves",
+        "{XDG_CONFIG}/retroarch/saves"
+      ]
+    },
+    "citra": {
+      "name": "Citra (3DS)",
+      "paths": [
+        "{APPDATA}/Citra/sdmc",
+        "{APPSUPPORT}/Citra/sdmc",
+        "{XDG_DATA}/citra-emu/sdmc"
+      ]
+    },
+    "yuzu": {
+      "name": "yuzu (Switch)",
+      "paths": [
+        "{APPDATA}/yuzu/nand/user/save",
+        "{APPSUPPORT}/yuzu/nand/user/save",
+        "{XDG_DATA}/yuzu/nand/user/save"
+      ]
+    },
+    "ryujinx": {
+      "name": "Ryujinx (Switch)",
+      "paths": [
+        "{APPDATA}/Ryujinx/bis/user/save",
+        "{APPSUPPORT}/Ryujinx/bis/user/save",
+        "{XDG_CONFIG}/Ryujinx/bis/user/save"
+      ]
+    },
+    "scummvm": {
+      "name": "ScummVM",
+      "paths": [
+        "{APPDATA}/ScummVM/Saved games",
+        "{APPSUPPORT}/ScummVM/Savegames",
+        "{HOME}/.local/share/scummvm/saves"
+      ]
+    }
+  }
+}

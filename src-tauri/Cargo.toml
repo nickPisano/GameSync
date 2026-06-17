@@ -1,0 +1,20 @@
+[package]
+name = "gamesync-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "GameSync desktop application (Tauri shell over gamesync-core)."
+
+[[bin]]
+name = "gamesync-app"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-dialog = "2"
+serde.workspace = true
+serde_json.workspace = true
+gamesync-core = { path = "../crates/gamesync-core" }
