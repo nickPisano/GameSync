@@ -16,6 +16,7 @@ fn main() {
 
     let result = match cmd {
         "scan" => cmd_scan(),
+        "update-list" => cmd_update_list(),
         "list" | "ls" => cmd_list(),
         "add" => cmd_add(&args[1..]),
         "enable" => cmd_set_enabled(&args[1..], true),
@@ -67,6 +68,14 @@ fn engine() -> Result<Engine, String> {
 
 fn cmd_where() -> Result<(), String> {
     println!("{}", Engine::default_data_dir().display());
+    Ok(())
+}
+
+fn cmd_update_list() -> Result<(), String> {
+    let eng = engine()?;
+    eprintln!("Downloading the community game list…");
+    let n = eng.update_game_list().map_err(|e| e.to_string())?;
+    println!("Updated — GameSync now auto-detects {n} games.");
     Ok(())
 }
 
@@ -488,6 +497,7 @@ USAGE:
 
 COMMANDS:
     scan                         Detect installed Steam games with known save paths
+    update-list                  Download the community game list (thousands of games)
     list                         List tracked games and their status
     add "<name>" <folder>        Track a game manually by its save folder
     enable <game_id>             Turn on sync for a game

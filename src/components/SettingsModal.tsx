@@ -34,6 +34,21 @@ export function SettingsModal({ onClose, notify }: Props) {
   const [keepDaysOn, setKeepDaysOn] = useState(true);
   const [keepDays, setKeepDays] = useState(30);
   const [storageBusy, setStorageBusy] = useState(false);
+  const [gameCount, setGameCount] = useState<number | null>(null);
+  const [updatingList, setUpdatingList] = useState(false);
+
+  async function updateList() {
+    setUpdatingList(true);
+    try {
+      const n = await api.updateGameList();
+      setGameCount(n);
+      notify(`Game list updated — ${n.toLocaleString()} games now auto-detectable.`);
+    } catch (e) {
+      notify(String(e), "err");
+    } finally {
+      setUpdatingList(false);
+    }
+  }
 
   const loadStorage = () =>
     api.storageReport().then(setStorage).catch((e) => notify(String(e), "err"));
@@ -126,6 +141,7 @@ export function SettingsModal({ onClose, notify }: Props) {
       })
       .catch((e) => notify(String(e), "err"));
     api.lanHostStatus().then(setLan).catch(() => {});
+    api.knownGameCount().then(setGameCount).catch(() => {});
     loadStorage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -248,6 +264,17 @@ export function SettingsModal({ onClose, notify }: Props) {
           </div>
         </div>
       )}
+
+      <h3 className="settings-h">Game detection</h3>
+      <p className="muted small">
+        GameSync auto-detects{" "}
+        <strong>{gameCount === null ? "…" : gameCount.toLocaleString()}</strong> games.
+        Update to pull the latest community list (thousands of games, from
+        PCGamingWiki via Ludusavi).
+      </p>
+      <button className="secondary" onClick={updateList} disabled={updatingList}>
+        {updatingList ? "Updating…" : "Update game list"}
+      </button>
 
       <h3 className="settings-h">Automatic sync</h3>
       <label className="toggle-row">

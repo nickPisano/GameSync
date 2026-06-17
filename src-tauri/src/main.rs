@@ -148,6 +148,16 @@ fn scan(state: State<AppState>) -> Result<Vec<Game>, String> {
 }
 
 #[tauri::command]
+fn update_game_list(state: State<AppState>) -> Result<usize, String> {
+    state.with_engine(|e| e.update_game_list())
+}
+
+#[tauri::command]
+fn known_game_count(state: State<AppState>) -> Result<usize, String> {
+    state.with_engine(|e| Ok(e.known_game_count()))
+}
+
+#[tauri::command]
 fn add_game(name: String, path: String, state: State<AppState>) -> Result<Game, String> {
     state.with_engine(|e| e.add_manual_game(&name, PathBuf::from(path)))
 }
@@ -594,6 +604,8 @@ fn main() {
             init_encryption,
             list_games,
             scan,
+            update_game_list,
+            known_game_count,
             add_game,
             set_sync_enabled,
             set_game_exe,

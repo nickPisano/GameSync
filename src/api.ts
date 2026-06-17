@@ -38,6 +38,8 @@ export const api = {
 
   listGames: () => invoke<GameView[]>("list_games"),
   scan: () => invoke<Game[]>("scan"),
+  updateGameList: () => invoke<number>("update_game_list"),
+  knownGameCount: () => invoke<number>("known_game_count"),
   addGame: (name: string, path: string) =>
     invoke<Game>("add_game", { name, path }),
   setSyncEnabled: (id: string, enabled: boolean) =>

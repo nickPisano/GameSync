@@ -7,14 +7,14 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::paths::Dirs;
 use super::steam::SteamApp;
 
 const BUNDLED: &str = include_str!("../../manifests/saves.json");
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SaveRule {
     pub name: Option<String>,
     pub paths: Vec<String>,

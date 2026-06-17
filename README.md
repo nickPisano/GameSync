@@ -65,6 +65,10 @@ After setup you land on the **library**. To add more games anytime:
 - **Add game** — for anything not detected: give it a name and **Browse…** to its
   save folder (or paste the path).
 
+GameSync ships with a small curated game list. **Settings → Game detection →
+Update game list** downloads the community manifest (PCGamingWiki via Ludusavi,
+~17,000 games) so Scan recognizes far more titles. (CLI: `gamesync update-list`.)
+
 Each game appears as a card showing its platform, save path, version count, and
 last backup time. Each card also has **Rename** and **Remove** (removing deletes
 the game's backup history in GameSync but never touches your actual save files).

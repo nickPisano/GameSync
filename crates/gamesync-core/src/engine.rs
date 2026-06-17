@@ -11,7 +11,7 @@ use crate::crypto::{Dek, KeyStore, RecoveryKey};
 use crate::db::Db;
 use crate::detection::emulators::EmulatorRule;
 use crate::detection::manifest::SaveRule;
-use crate::detection::{emulators, manifest, steam};
+use crate::detection::{emulators, ludusavi, manifest, steam};
 use crate::error::{Error, Result};
 use crate::model::{Game, Head, Platform, Snapshot, SnapshotKind};
 use crate::plugins;
@@ -422,16 +422,53 @@ impl Engine {
             .collect()
     }
 
-    /// Bundled game rules plus those from enabled plugins (plugins win on key
-    /// collisions).
+    /// All known game rules: the downloaded community list (if any) as the base,
+    /// overridden by the curated bundled manifest, overridden by enabled plugins.
     fn merged_game_rules(&self) -> BTreeMap<String, SaveRule> {
-        let mut map = manifest::bundled().games;
+        let mut map = self.community_rules();
+        for (k, v) in manifest::bundled().games {
+            map.insert(k, v);
+        }
         for plugin in self.enabled_plugins() {
             for (k, v) in plugin.file.games {
                 map.insert(k, v);
             }
         }
         map
+    }
+
+    fn community_manifest_path(&self) -> PathBuf {
+        self.data_dir.join("community-manifest.json")
+    }
+
+    /// The downloaded community rules (appid → rule), or empty if not fetched.
+    fn community_rules(&self) -> BTreeMap<String, SaveRule> {
+        std::fs::read_to_string(self.community_manifest_path())
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    }
+
+    /// Total number of games GameSync can auto-detect (community + bundled + plugins).
+    pub fn known_game_count(&self) -> usize {
+        self.merged_game_rules().len()
+    }
+
+    /// Download the community game list, translate it, and cache it. Returns how
+    /// many games are now known in total. Network-bound (uses `curl`).
+    pub fn update_game_list(&self) -> Result<usize> {
+        let yaml = ludusavi::fetch(ludusavi::MANIFEST_URL)?;
+        let rules = ludusavi::parse(&yaml);
+        if rules.is_empty() {
+            return Err(Error::other(
+                "the downloaded game list was empty or could not be read",
+            ));
+        }
+        crate::util::atomic_write(
+            &self.community_manifest_path(),
+            &serde_json::to_vec(&rules)?,
+        )?;
+        Ok(self.known_game_count())
     }
 
     fn merged_emulator_rules(&self) -> BTreeMap<String, EmulatorRule> {

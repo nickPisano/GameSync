@@ -44,7 +44,7 @@ stateful logic in `gamesync-core` means the UI is just presentation + IPC.
 | `diff` | Compare two snapshots (added / removed / modified / unchanged). |
 | `retention` | Keep-last-N / keep-within-days pruning + reference-counted GC. |
 | `process` | Is the game running? Which install dirs are running (exit watcher)? Has the folder gone quiescent? |
-| `detection` | `vdf` parser, Steam discovery, `emulators`, per-OS `paths` expansion, save-path `manifest`. |
+| `detection` | `vdf` parser, Steam discovery, `emulators`, per-OS `paths` expansion, bundled save-path `manifest`, and `ludusavi` (downloads/translates the ~17k-game community manifest). |
 | `vclock` | Version-vector compare / merge / bump — the basis of conflict detection. |
 | `remote` | `Remote` trait + transports: `FolderRemote` (a folder), `RcloneRemote` (40+ cloud backends via rclone), `LanRemote`/`lan::serve` (peer-to-peer over TCP). |
 | `plugins` | Drop-in JSON plugins: game/emulator defs (merged into detection), hooks, file viewers. Command execution is opt-in. |
