@@ -11,7 +11,7 @@ a website — it has to run on your machine.
 
 ## Contents
 
-- [Install & run](#install--run)
+- [Install & run](#install--run) — [download a build](#download-a-prebuilt-build-recommended) · [build from source](#build-from-source)
 - **Tutorials**
   - [First-time setup](#tutorial-first-time-setup)
   - [Find & add games](#tutorial-find--add-games) — Scan · Add game · Update game list
@@ -29,52 +29,82 @@ a website — it has to run on your machine.
 
 ## Install & run
 
-There's no installer yet — you build it from source (one-time setup, ~5 min plus
-a first compile).
+The fastest way is to **download a prebuilt build** for your OS. Prefer to
+compile it yourself? See [Build from source](#build-from-source) below.
 
-### 1. Install the prerequisites
+### Download a prebuilt build (recommended)
 
-You need **Rust**, **Node.js 18+**, and your OS's C toolchain + system webview.
+**1. Get the file for your OS.** Open the [**Releases**](https://github.com/nickPisano/GameSync/releases)
+page, expand the latest version's **Assets**, and download either an
+**installer** or a **portable** build (`<ver>` is the version number in the
+filename, e.g. `0.1.0`):
 
-- **Rust** — install from <https://rustup.rs> (or `brew install rust`). Confirm with `cargo --version`.
-- **Node.js 18+** — from <https://nodejs.org> (or `brew install node`). Confirm with `node --version`.
-- **C toolchain + webview**, by OS:
+| Your system | Installer | Portable (no install — just run) |
+| --- | --- | --- |
+| **macOS** (Intel *or* Apple Silicon) | `GameSync_<ver>_universal.dmg` | the **GameSync.app** inside that `.dmg` |
+| **Windows x64** | `GameSync_<ver>_x64-setup.exe` *or* `…_x64_en-US.msi` | `GameSync_<ver>_x64-portable.exe` |
+| **Windows arm64** | `GameSync_<ver>_arm64-setup.exe` *or* `…_arm64_en-US.msi` | `GameSync_<ver>_arm64-portable.exe` |
+| **Linux x64** | `GameSync_<ver>_amd64.deb` *or* `GameSync-<ver>-1.x86_64.rpm` | `GameSync_<ver>_amd64.AppImage` |
+| **Linux arm64** | `GameSync_<ver>_arm64.deb` *or* `GameSync-<ver>-1.aarch64.rpm` | `GameSync_<ver>_aarch64.AppImage` |
+
+> **Which architecture?** The macOS build is *universal* (runs on both), so just
+> take the `.dmg`. On **Windows**: Settings → System → About → *System type*. On
+> **Linux**: run `uname -m` (`x86_64` → x64, `aarch64` → arm64).
+
+**2. Install or run it:**
+
+- **macOS** — open the `.dmg`, drag **GameSync** into **Applications**, launch it.
+- **Windows** — run the `-setup.exe` (or `.msi`) to install, **or** just
+  double-click the `-portable.exe` to run with no install. Needs the **WebView2
+  Runtime** (preinstalled on Windows 10/11).
+- **Linux** — installer: `sudo apt install ./GameSync_<ver>_amd64.deb` (or
+  `sudo dnf install ./GameSync-<ver>-1.x86_64.rpm`). Portable:
+  `chmod +x GameSync_<ver>_amd64.AppImage && ./GameSync_<ver>_amd64.AppImage`.
+
+> **First run shows an "unidentified developer" warning.** The builds aren't
+> code-signed yet, so the OS blocks them by default. It's safe to allow:
+> - **macOS:** right-click **GameSync** → **Open** → **Open** (just the first
+>   time), or run `xattr -dr com.apple.quarantine /Applications/GameSync.app`.
+> - **Windows:** on the SmartScreen dialog, click **More info → Run anyway**.
+
+**3.** The app opens — continue to [First-time setup](#tutorial-first-time-setup).
+
+### Build from source
+
+For development, or a platform/arch without a prebuilt binary.
+
+**1. Install the prerequisites** — **Rust**, **Node.js 18+**, and your OS's C
+toolchain + system webview:
+
+- **Rust** — from <https://rustup.rs> (or `brew install rust`); check `cargo --version`.
+- **Node.js 18+** — from <https://nodejs.org> (or `brew install node`); check `node --version`.
+- **C toolchain + webview:**
   - **macOS:** `xcode-select --install` (WebKit ships with macOS).
-  - **Windows:** *Microsoft Visual C++ Build Tools* and the *WebView2 Runtime* (preinstalled on Windows 11).
+  - **Windows:** *Microsoft Visual C++ Build Tools* + the *WebView2 Runtime* (preinstalled on Win11).
   - **Linux (Debian/Ubuntu):** `sudo apt install libwebkit2gtk-4.1-dev build-essential libssl-dev libayatana-appindicator3-dev librsvg2-dev`
 
-No database to install — SQLite is bundled.
+  (No database to install — SQLite is bundled.)
 
-### 2. Get the code
+**2. Get the code & run it:**
 
 ```sh
 git clone https://github.com/nickPisano/GameSync.git
 cd GameSync
-npm install            # one time: install the frontend dependencies
-```
-
-### 3. Run it
-
-```sh
+npm install            # one time: install frontend dependencies
 npm run tauri dev      # builds + launches the app window
 ```
 
-The first compile builds the whole webview stack and takes a few minutes; later
-launches are fast. The window opens automatically.
+The first compile builds the whole webview stack (a few minutes); later launches
+are fast.
 
-### 4. (Optional) Build a standalone app
+**3. (Optional) Build your own installers/portables:**
 
 ```sh
-npm run tauri build    # release bundle/installer for your OS
+npm run tauri build    # bundles for the current OS in target/release/bundle/
 ```
 
-The output lands in **`target/release/bundle/`** (e.g. `…/bundle/macos/GameSync.app`
-and a `.dmg` on macOS; an `.msi`/`.exe` on Windows; an `.AppImage`/`.deb` on Linux).
-Unsigned builds run on your machine but warn on others — see
-[`docs/BUILDING.md`](docs/BUILDING.md) for **code signing & notarization**, which
-needs your own developer certificates.
-
-> Icons are already wired up; regenerate them with `npm run tauri icon src-tauri/icons/icon.png`.
+See [`docs/BUILDING.md`](docs/BUILDING.md) for multi-arch builds, the automated
+release workflow, and **code signing & notarization** (needs your own certs).
 
 ---
 
