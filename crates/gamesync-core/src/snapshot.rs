@@ -83,6 +83,7 @@ pub fn head_base(db: &Db, game_id: &str) -> Result<(VectorClock, Option<String>)
 /// This function assumes the caller has already established that it is safe to
 /// read (game not running / folder quiescent). It does not touch the live save
 /// folder beyond reading it.
+#[allow(clippy::too_many_arguments)]
 pub fn create_snapshot(
     db: &Db,
     cas: &Cas,
@@ -112,6 +113,7 @@ pub fn create_snapshot(
 /// is byte-for-byte identical to `head` (same set of `rel_path → hash`). Used by
 /// auto-sync so an unchanged save doesn't accrue duplicate history entries.
 /// Returns `None` when nothing changed.
+#[allow(clippy::too_many_arguments)]
 pub fn create_snapshot_if_changed(
     db: &Db,
     cas: &Cas,

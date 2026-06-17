@@ -5,7 +5,7 @@
 //! install directories.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::vdf;
 
@@ -59,8 +59,8 @@ pub fn steam_root() -> Option<PathBuf> {
 }
 
 /// All Steam library roots (each contains a `steamapps/` directory).
-pub fn library_paths(root: &PathBuf) -> Vec<PathBuf> {
-    let mut libs = vec![root.clone()];
+pub fn library_paths(root: &Path) -> Vec<PathBuf> {
+    let mut libs = vec![root.to_path_buf()];
     let vdf_path = root.join("steamapps").join("libraryfolders.vdf");
     if let Ok(text) = fs::read_to_string(&vdf_path) {
         let parsed = vdf::parse(&text);

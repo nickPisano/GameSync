@@ -43,6 +43,8 @@ impl Platform {
         }
     }
 
+    // Infallible parse (unknown -> Manual), so an inherent method rather than FromStr.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Platform {
         match s {
             "steam" => Platform::Steam,
@@ -92,6 +94,8 @@ impl SnapshotKind {
         }
     }
 
+    // Infallible parse (unknown -> Auto), so an inherent method rather than FromStr.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> SnapshotKind {
         match s {
             "manual" => SnapshotKind::Manual,

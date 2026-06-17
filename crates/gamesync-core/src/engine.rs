@@ -940,7 +940,7 @@ impl Engine {
                 bytes,
             });
         }
-        games.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+        games.sort_by_key(|g| std::cmp::Reverse(g.bytes));
         Ok(StorageReport {
             total_objects,
             total_bytes,

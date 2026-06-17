@@ -97,7 +97,7 @@ pub fn to_hex(bytes: &[u8]) -> String {
 /// Decode lowercase/uppercase hex; returns None on malformed input.
 pub fn from_hex(s: &str) -> Option<Vec<u8>> {
     let s = s.trim();
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return None;
     }
     let bytes = s.as_bytes();
@@ -155,7 +155,7 @@ pub fn make_dir_symlink(target: &Path, link: &Path) -> io::Result<()> {
 pub fn atomic_write(path: &Path, data: &[u8]) -> io::Result<()> {
     let parent = path
         .parent()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "path has no parent directory"))?;
+        .ok_or_else(|| io::Error::other("path has no parent directory"))?;
     fs::create_dir_all(parent)?;
     let tmp = parent.join(format!(".gstmp-{}", new_id()));
     {
