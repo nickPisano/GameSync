@@ -17,9 +17,11 @@ import {
 interface Props {
   onClose: () => void;
   notify: (msg: string, kind?: "ok" | "err") => void;
+  encrypted: boolean;
+  onEnableEncryption: () => void;
 }
 
-export function SettingsModal({ onClose, notify }: Props) {
+export function SettingsModal({ onClose, notify, encrypted, onEnableEncryption }: Props) {
   const [enabled, setEnabled] = useState(false);
   const [interval, setIntervalMin] = useState(15);
   const [backupOnExit, setBackupOnExit] = useState(true);
@@ -325,6 +327,24 @@ export function SettingsModal({ onClose, notify }: Props) {
           {saving ? "Saving…" : "Save"}
         </button>
       </div>
+
+      <h3 className="settings-h">Encryption</h3>
+      {encrypted ? (
+        <p className="muted small">
+          🔒 Encryption is on — all saved data is encrypted at rest with your
+          passphrase.
+        </p>
+      ) : (
+        <>
+          <p className="muted small">
+            Encrypt all saved data at rest with a passphrase (zero-knowledge).
+            You'll get a one-time recovery key when you turn it on.
+          </p>
+          <button className="secondary" onClick={onEnableEncryption}>
+            Enable encryption
+          </button>
+        </>
+      )}
 
       <h3 className="settings-h">Integrity</h3>
       <p className="muted small">

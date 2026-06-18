@@ -326,12 +326,8 @@ export function App() {
           <button className="secondary" onClick={() => setSettingsOpen(true)}>
             Settings
           </button>
-          {status.encrypted ? (
+          {status.encrypted && (
             <span className="enc-pill" title="Encryption enabled">🔒 Encrypted</span>
-          ) : (
-            <button className="secondary" onClick={() => setEncryptOpen(true)}>
-              Enable encryption
-            </button>
           )}
         </div>
       </header>
@@ -438,7 +434,15 @@ export function App() {
       )}
 
       {settingsOpen && (
-        <SettingsModal onClose={() => setSettingsOpen(false)} notify={notify} />
+        <SettingsModal
+          onClose={() => setSettingsOpen(false)}
+          notify={notify}
+          encrypted={status.encrypted}
+          onEnableEncryption={() => {
+            setSettingsOpen(false);
+            setEncryptOpen(true);
+          }}
+        />
       )}
 
       {pluginsOpen && (
