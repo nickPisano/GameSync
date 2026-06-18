@@ -236,8 +236,10 @@ fn open_folder(path: String) -> Result<(), String> {
         c.arg(&path);
         c
     } else if cfg!(target_os = "windows") {
+        // Explorer needs backslash separators; forward slashes make it ignore
+        // the path and open Documents/Quick Access instead.
         let mut c = std::process::Command::new("explorer");
-        c.arg(&path);
+        c.arg(path.replace('/', "\\"));
         c
     } else {
         let mut c = std::process::Command::new("xdg-open");
@@ -261,8 +263,14 @@ fn reveal_file(path: String) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
+        // `explorer /select,<path>` needs backslash separators and the path as
+        // its own quoted token, or Explorer silently opens the default location
+        // instead of selecting the file. raw_arg keeps Rust from escaping the
+        // whole "/select,…" string into a single quoted token.
+        use std::os::windows::process::CommandExt;
+        let win = path.replace('/', "\\");
         std::process::Command::new("explorer")
-            .arg(format!("/select,{path}"))
+            .raw_arg(format!("/select,\"{win}\""))
             .spawn()
             .map_err(|e| e.to_string())?;
         return Ok(());
