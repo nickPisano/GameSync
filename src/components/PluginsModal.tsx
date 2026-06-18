@@ -97,6 +97,7 @@ export function PluginsModal({ onClose, notify }: Props) {
                 checked={p.enabled}
                 onChange={(e) => toggle(p.id, e.target.checked)}
               />
+              <span className="switch" aria-hidden="true" />
               <span>{p.enabled ? "On" : "Off"}</span>
             </label>
           </div>

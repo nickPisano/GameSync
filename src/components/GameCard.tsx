@@ -85,6 +85,7 @@ export function GameCard({
             disabled={busy}
             onChange={(e) => onToggleSync(e.target.checked)}
           />
+          <span className="switch" aria-hidden="true" />
           <span>Sync</span>
         </label>
         <button onClick={onBackup} disabled={busy}>

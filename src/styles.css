@@ -426,14 +426,70 @@ input[type="radio"] {
   box-shadow: none;
 }
 .toggle {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 13px;
   font-weight: 500;
   color: var(--muted);
   cursor: pointer;
   user-select: none;
+}
+/* Visually hide the native checkbox but keep it focusable / accessible. */
+.toggle > input[type="checkbox"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+/* Sliding switch track. */
+.toggle .switch {
+  position: relative;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+/* The knob. */
+.toggle .switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+/* On state. */
+.toggle > input[type="checkbox"]:checked + .switch {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.toggle > input[type="checkbox"]:checked + .switch::after {
+  transform: translateX(16px);
+  background: #fff;
+}
+.toggle > input[type="checkbox"]:checked ~ span:last-child {
+  color: var(--text);
+}
+/* Keyboard focus ring on the visible track. */
+.toggle > input[type="checkbox"]:focus-visible + .switch {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Disabled. */
+.toggle > input[type="checkbox"]:disabled + .switch {
+  opacity: 0.45;
+}
+.toggle > input[type="checkbox"]:disabled ~ span:last-child {
+  opacity: 0.6;
 }
 
 /* ---- badges -------------------------------------------------------------- */
