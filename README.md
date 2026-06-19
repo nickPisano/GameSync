@@ -13,6 +13,7 @@ a website — it has to run on your machine.
 
 - [Install & run](#install--run) — [download a build](#download-a-prebuilt-build-recommended) · [build from source](#build-from-source)
 - [Supported games](docs/GAMES.md) — ~70 built in, ~17,000 via in-app update
+- Official add-ons — [themes](https://github.com/nickPisano/GameSync-Themes) · [plugins](https://github.com/nickPisano/GameSync-Plugins)
 - **Tutorials**
   - [First-time setup](#tutorial-first-time-setup)
   - [Find & add games](#tutorial-find--add-games) — Scan · Add game · Update game list
@@ -365,23 +366,32 @@ Encrypts everything GameSync stores and uploads.
 
 1. Open **Settings → Appearance**.
 2. Click a built-in swatch — **Midnight**, **Light**, **Forest**, or **Grape** —
-   it applies instantly.
-3. For more options use the **More themes…** dropdown, which includes **Auto**
-   (follow your OS light/dark setting) and any custom themes you've imported.
+   it applies instantly. (New installs follow your OS light/dark setting until
+   you pick one.)
+3. Click **More themes…** to open the theme gallery — a grid of every theme with
+   its own preview tile: **Auto** (follow your OS), all built-ins, and any custom
+   themes you've imported. Click a tile and it applies instantly.
 
 ### Import a custom theme
 
-1. Open **Settings → Appearance → Import…**.
+1. Open **Settings → Appearance → More themes… → Import a theme…**.
 2. Paste a theme as JSON: a `name` plus a `colors` object with the keys `bg`,
    `panel`, `panel-2`, `border`, `text`, `muted`, `accent`, `accent-hover`,
-   `ok`, `err`, `warn`. (A filled-in template is pre-loaded — edit it.)
-3. Click **Import**. It applies immediately and joins the **More themes…**
-   dropdown.
-4. To delete a custom theme, select it in **More themes…** and click **Remove**.
+   `ok`, `err`, `warn`. Optionally add a `swatch` (any CSS background — a gradient
+   or a `data:` image URL) to give your theme its own preview tile. (A filled-in
+   template is pre-loaded — edit it.)
+3. Click **Import**. It applies immediately and shows up as a tile in the gallery.
+4. To delete a custom theme, click the **×** on its tile in the gallery.
+
+> **Want more themes?** Browse the official
+> [GameSync-Themes](https://github.com/nickPisano/GameSync-Themes) gallery and
+> import any palette you like.
 
 ### Plugins
 
-Extend GameSync with drop-in `.json` files:
+Extend GameSync with drop-in `.json` files — grab ready-made ones from the
+official [GameSync-Plugins](https://github.com/nickPisano/GameSync-Plugins)
+catalog, or write your own:
 
 1. Open **Plugins**, then **Open folder** and drop a `.json` plugin in.
 2. Click **Reload**. A plugin can add games/emulator save paths to detection,
