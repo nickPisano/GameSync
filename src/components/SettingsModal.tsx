@@ -65,7 +65,7 @@ export function SettingsModal({ onClose, notify, encrypted, onEnableEncryption }
       notify(String(e), "err");
     } finally {
       setUpdatingList(false);
-      setUpdateCooldown(10); // 10s cooldown to prevent re-fetch spam
+      setUpdateCooldown(60); // 60s cooldown to prevent re-fetch spam
     }
   }
 
