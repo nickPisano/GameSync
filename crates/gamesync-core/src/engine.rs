@@ -379,7 +379,7 @@ impl Engine {
     /// path-probe; a game is added only if its save folder exists.
     pub fn scan_standalone(&self) -> Result<Vec<Game>> {
         let mut found = Vec::new();
-        for d in emulators::detect_from(&standalone::bundled_rules()) {
+        for d in standalone::detect() {
             let id = format!("standalone:{}", d.key);
             let previous = self.db.get_game(&id).ok();
             let game = Game {
@@ -387,7 +387,7 @@ impl Engine {
                 name: d.name,
                 platform: Platform::Standalone,
                 save_root: d.save_root,
-                install_dir: None,
+                install_dir: d.install_dir,
                 includes: default_includes(),
                 excludes: default_excludes(),
                 sync_enabled: previous.map(|p| p.sync_enabled).unwrap_or(false),

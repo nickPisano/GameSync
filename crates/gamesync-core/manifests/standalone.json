@@ -15,6 +15,14 @@
         "C:/Games/GAMMA/Anomaly/appdata/savedgames",
         "{USERPROFILE}/Desktop/G.A.M.M.A/Anomaly/appdata/savedgames",
         "{DOCUMENTS}/G.A.M.M.A/Anomaly/appdata/savedgames"
+      ],
+      "install": [
+        "C:/G.A.M.M.A/Anomaly",
+        "C:/Games/G.A.M.M.A/Anomaly",
+        "C:/GAMMA/Anomaly",
+        "C:/Games/GAMMA/Anomaly",
+        "{USERPROFILE}/Desktop/G.A.M.M.A/Anomaly",
+        "{DOCUMENTS}/G.A.M.M.A/Anomaly"
       ]
     }
   }
