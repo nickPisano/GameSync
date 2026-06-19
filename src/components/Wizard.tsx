@@ -1,23 +1,18 @@
 import { useState } from "react";
 import { api, pickFolder } from "../api";
-import type { AppStatus, Game } from "../types";
+import type { Game } from "../types";
 
 interface Props {
-  status: AppStatus;
   onDone: () => void;
   notify: (msg: string, kind?: "ok" | "err") => void;
 }
 
-/** First-run guided setup: mode → remote → encryption → pick games. */
-export function Wizard({ status, onDone, notify }: Props) {
+/** First-run guided setup: mode → remote → storage → pick games. */
+export function Wizard({ onDone, notify }: Props) {
   const [step, setStep] = useState(1);
   const [mode, setMode] = useState<"local" | "cloud" | null>(null);
   const [remotePath, setRemotePath] = useState("");
-  const [encrypt, setEncrypt] = useState(false);
   const [compress, setCompress] = useState(false);
-  const [pass, setPass] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [recovery, setRecovery] = useState<string | null>(null);
   const [scanned, setScanned] = useState<Game[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -74,25 +69,7 @@ export function Wizard({ status, onDone, notify }: Props) {
       setError(String(e));
       return;
     }
-    await encryptionContinue();
-  }
-
-  async function encryptionContinue() {
-    if (status.encrypted || !encrypt) {
-      await gotoGames();
-      return;
-    }
-    if (pass.length < 8) return setError("Passphrase must be at least 8 characters.");
-    if (pass !== confirm) return setError("Passphrases do not match.");
-    setBusy(true);
-    setError(null);
-    try {
-      setRecovery(await api.initEncryption(pass));
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
+    await gotoGames();
   }
 
   function toggleGame(id: string) {
@@ -187,103 +164,30 @@ export function Wizard({ status, onDone, notify }: Props) {
         {step === 3 && (
           <>
             <h1>Storage options</h1>
-            {recovery ? (
-              <>
-                <p>
-                  Encryption is on. <strong>Save this recovery key</strong> — it
-                  appears only once and can unlock your saves if you forget the
-                  passphrase.
-                </p>
-                <pre className="recovery-key">{recovery}</pre>
-                <div className="wizard-foot">
-                  <button onClick={gotoGames}>I&apos;ve saved it — continue</button>
-                </div>
-              </>
-            ) : status.encrypted ? (
-              <>
-                <p className="muted">Encryption is already enabled for this store.</p>
-                <label className="toggle-row">
-                  <input
-                    type="checkbox"
-                    checked={compress}
-                    onChange={(e) => setCompress(e.target.checked)}
-                  />
-                  <span>
-                    Compress backups (LZMA2 / 7-Zip)
-                    <span className="muted"> — smaller backups and uploads</span>
-                  </span>
-                </label>
-                {error && <div className="error">{error}</div>}
-                <div className="wizard-foot">
-                  <button className="secondary" onClick={() => setStep(mode === "cloud" ? 2 : 1)}>
-                    Back
-                  </button>
-                  <button onClick={storageContinue} disabled={busy}>
-                    Continue
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="muted small">
-                  These can only be enabled now, on a fresh store.
-                </p>
-                <label className="toggle-row">
-                  <input
-                    type="checkbox"
-                    checked={compress}
-                    onChange={(e) => setCompress(e.target.checked)}
-                  />
-                  <span>
-                    Compress backups (LZMA2 / 7-Zip)
-                    <span className="muted"> — smaller backups and uploads</span>
-                  </span>
-                </label>
-                <label className="toggle-row">
-                  <input
-                    type="checkbox"
-                    checked={encrypt}
-                    onChange={(e) => setEncrypt(e.target.checked)}
-                  />
-                  <span>
-                    Encrypt my saves with a passphrase
-                    <span className="muted"> — zero-knowledge, optional</span>
-                  </span>
-                </label>
-                {encrypt && (
-                  <>
-                    <label className="field">
-                      <span>Passphrase (min 8 chars)</span>
-                      <input
-                        type="password"
-                        value={pass}
-                        onChange={(e) => setPass(e.target.value)}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Confirm passphrase</span>
-                      <input
-                        type="password"
-                        value={confirm}
-                        onChange={(e) => setConfirm(e.target.value)}
-                      />
-                    </label>
-                  </>
-                )}
-                {error && <div className="error">{error}</div>}
-                <div className="wizard-foot">
-                  <button
-                    className="secondary"
-                    onClick={() => setStep(mode === "cloud" ? 2 : 1)}
-                  >
-                    Back
-                  </button>
-                  <button onClick={storageContinue} disabled={busy}>
-                    Continue
-                  </button>
-                </div>
-              </>
-            )}
+            <p className="muted small">
+              Compression can only be enabled now, on a fresh store. Encryption is
+              optional and can be turned on later from <strong>Settings</strong>.
+            </p>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={compress}
+                onChange={(e) => setCompress(e.target.checked)}
+              />
+              <span>
+                Compress backups (LZMA2 / 7-Zip)
+                <span className="muted"> — smaller backups and uploads</span>
+              </span>
+            </label>
+            {error && <div className="error">{error}</div>}
+            <div className="wizard-foot">
+              <button className="secondary" onClick={() => setStep(mode === "cloud" ? 2 : 1)}>
+                Back
+              </button>
+              <button onClick={storageContinue} disabled={busy}>
+                Continue
+              </button>
+            </div>
           </>
         )}
 

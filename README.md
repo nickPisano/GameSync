@@ -112,15 +112,15 @@ release workflow, and **code signing & notarization** (needs your own certs).
 
 ## Tutorial: First-time setup
 
-On first launch a 4-step **setup wizard** appears:
+On first launch a **setup wizard** appears:
 
 1. **Choose a mode** — local-only backups, or cross-device sync.
 2. **Pick a sync folder** (only if syncing) — a folder inside something you
    already sync (Dropbox/Drive/OneDrive/network share). Use the *same* folder on
    every device.
-3. **Encryption** (optional) — turn on zero-knowledge encryption and save the
-   recovery key.
-4. **Scan & select** — GameSync detects installed games; tick the ones to track.
+3. **Scan & select** — GameSync detects installed games; tick the ones to track.
+
+Encryption is optional and set up later from **Settings → Encryption**.
 
 Prefer to dive in? Click **Skip setup** at any step and configure things later
 from the toolbar. Either way you land on the **library**, where each game is a

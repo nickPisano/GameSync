@@ -275,7 +275,7 @@ export function App() {
   }
 
   if (!status.setup_complete) {
-    return <Wizard status={status} onDone={() => loadStatus()} notify={notify} />;
+    return <Wizard onDone={() => loadStatus()} notify={notify} />;
   }
 
   // ---- main app --------------------------------------------------------
