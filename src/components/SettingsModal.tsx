@@ -30,9 +30,17 @@ export function SettingsModal({ onClose, notify, encrypted, onEnableEncryption }
   const [storageBusy, setStorageBusy] = useState(false);
   const [gameCount, setGameCount] = useState<number | null>(null);
   const [updatingList, setUpdatingList] = useState(false);
+  const [updateCooldown, setUpdateCooldown] = useState(0);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
+
+  // Throttle "Update game list" so it can't be spammed: tick down once a second.
+  useEffect(() => {
+    if (updateCooldown <= 0) return;
+    const t = setTimeout(() => setUpdateCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [updateCooldown]);
 
   async function checkForUpdate() {
     setCheckingUpdate(true);
@@ -57,6 +65,7 @@ export function SettingsModal({ onClose, notify, encrypted, onEnableEncryption }
       notify(String(e), "err");
     } finally {
       setUpdatingList(false);
+      setUpdateCooldown(10); // 10s cooldown to prevent re-fetch spam
     }
   }
 
@@ -217,8 +226,16 @@ export function SettingsModal({ onClose, notify, encrypted, onEnableEncryption }
         Update to pull the latest community list (thousands of games, from
         PCGamingWiki via Ludusavi).
       </p>
-      <button className="secondary" onClick={updateList} disabled={updatingList}>
-        {updatingList ? "Updating…" : "Update game list"}
+      <button
+        className="secondary"
+        onClick={updateList}
+        disabled={updatingList || updateCooldown > 0}
+      >
+        {updatingList
+          ? "Updating…"
+          : updateCooldown > 0
+            ? `Update game list (${updateCooldown}s)`
+            : "Update game list"}
       </button>
 
       <h3 className="settings-h">Automatic sync</h3>
