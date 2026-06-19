@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Modal } from "./Modal";
 import { api } from "../api";
-import type { LanHostInfo, StorageReport, VerifyResult } from "../types";
+import type { LanHostInfo, StorageReport, UpdateInfo, VerifyResult } from "../types";
 import { humanSize } from "../format";
 import {
   applyTheme,
@@ -38,6 +38,22 @@ export function SettingsModal({ onClose, notify, encrypted, onEnableEncryption }
   const [storageBusy, setStorageBusy] = useState(false);
   const [gameCount, setGameCount] = useState<number | null>(null);
   const [updatingList, setUpdatingList] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+
+  async function checkForUpdate() {
+    setCheckingUpdate(true);
+    setUpdate(null);
+    setUpdateError(null);
+    try {
+      setUpdate(await api.checkForUpdate());
+    } catch (e) {
+      setUpdateError(String(e));
+    } finally {
+      setCheckingUpdate(false);
+    }
+  }
 
   async function updateList() {
     setUpdatingList(true);
@@ -463,6 +479,44 @@ export function SettingsModal({ onClose, notify, encrypted, onEnableEncryption }
             Keep GameSync running here while syncing. The address changes each
             time you start hosting.
           </span>
+        </div>
+      )}
+
+      <h3 className="settings-h">Updates</h3>
+      <p className="muted small">
+        GameSync doesn&apos;t update itself — check here and download the latest
+        build from the releases page.
+      </p>
+      <button className="secondary" onClick={checkForUpdate} disabled={checkingUpdate}>
+        {checkingUpdate ? "Checking…" : "Check for updates"}
+      </button>
+      {update && update.update_available && (
+        <div className="verify-result ok">
+          Update available: <strong>v{update.latest}</strong> (you have v
+          {update.current}).
+          <div style={{ marginTop: 8 }}>
+            <button className="secondary" onClick={() => api.openUrl(update.url)}>
+              Open releases page
+            </button>
+          </div>
+        </div>
+      )}
+      {update && !update.update_available && (
+        <p className="muted small">You&apos;re on the latest version (v{update.current}).</p>
+      )}
+      {updateError && (
+        <div className="verify-result bad">
+          {updateError}
+          <div style={{ marginTop: 8 }}>
+            <button
+              className="secondary"
+              onClick={() =>
+                api.openUrl("https://github.com/nickPisano/GameSync/releases")
+              }
+            >
+              Open releases page
+            </button>
+          </div>
         </div>
       )}
     </Modal>

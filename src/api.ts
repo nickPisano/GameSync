@@ -19,6 +19,7 @@ import type {
   Snapshot,
   StorageReport,
   SyncOutcome,
+  UpdateInfo,
   VerifyResult,
   ViewerInfo,
 } from "./types";
@@ -62,6 +63,8 @@ export const api = {
   listSaveFiles: (id: string) => invoke<SaveFile[]>("list_save_files", { id }),
   openFolder: (path: string) => invoke<void>("open_folder", { path }),
   revealFile: (path: string) => invoke<void>("reveal_file", { path }),
+  openUrl: (url: string) => invoke<void>("open_url", { url }),
+  checkForUpdate: () => invoke<UpdateInfo>("check_for_update"),
 
   listPlugins: () => invoke<PluginList>("list_plugins"),
   setPluginEnabled: (id: string, enabled: boolean) =>

@@ -55,6 +55,13 @@ export interface AppStatus {
   data_dir: string;
 }
 
+export interface UpdateInfo {
+  current: string;
+  latest: string;
+  update_available: boolean;
+  url: string;
+}
+
 // SyncOutcome is internally tagged on `status`.
 export type SyncOutcome =
   | { status: "in_sync" }

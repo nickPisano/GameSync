@@ -292,6 +292,102 @@ fn reveal_file(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// GitHub API + human page for release checks.
+const RELEASES_API: &str = "https://api.github.com/repos/nickPisano/GameSync/releases/latest";
+const RELEASES_PAGE: &str = "https://github.com/nickPisano/GameSync/releases";
+
+#[derive(Serialize)]
+struct UpdateInfo {
+    current: String,
+    latest: String,
+    update_available: bool,
+    /// Page to send the user to when an update is available.
+    url: String,
+}
+
+/// Parse "1.2.3" (ignoring a leading `v` and any `-pre`/`+build` suffix) into a
+/// comparable tuple; unparseable parts become 0.
+fn parse_version(v: &str) -> (u32, u32, u32) {
+    let core = v.trim().trim_start_matches('v');
+    let core = core.split(['-', '+']).next().unwrap_or(core);
+    let mut it = core.split('.').map(|p| p.parse::<u32>().unwrap_or(0));
+    (
+        it.next().unwrap_or(0),
+        it.next().unwrap_or(0),
+        it.next().unwrap_or(0),
+    )
+}
+
+/// Check GitHub for a newer published release. Returns the current/latest
+/// versions and whether an update is available. Failures (offline, rate-limited,
+/// or the repo not being public yet) surface a friendly message so the UI can
+/// fall back to linking the releases page.
+#[tauri::command]
+fn check_for_update() -> Result<UpdateInfo, String> {
+    let current = env!("CARGO_PKG_VERSION").to_string();
+    let out = std::process::Command::new("curl")
+        .args([
+            "-fsSL",
+            "--max-time",
+            "20",
+            "-A",
+            "GameSync-update-check",
+            "-H",
+            "Accept: application/vnd.github+json",
+            RELEASES_API,
+        ])
+        .output()
+        .map_err(|e| format!("Couldn't run the update check: {e}"))?;
+    if !out.status.success() {
+        return Err("Couldn't reach GitHub to check for updates.".into());
+    }
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout)
+        .map_err(|_| "Unexpected response from GitHub.".to_string())?;
+    let tag = json
+        .get("tag_name")
+        .and_then(|v| v.as_str())
+        .ok_or("No published release found yet.")?;
+    let latest = tag.trim_start_matches('v').to_string();
+    let url = json
+        .get("html_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or(RELEASES_PAGE)
+        .to_string();
+    let update_available = parse_version(&latest) > parse_version(&current);
+    Ok(UpdateInfo {
+        current,
+        latest,
+        update_available,
+        url,
+    })
+}
+
+/// Open a URL in the user's default browser.
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("open");
+        c.arg(&url);
+        c
+    };
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        // `start` with an empty title arg opens the default browser.
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", "start", "", &url]);
+        c
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut cmd = {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(&url);
+        c
+    };
+    cmd.spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 fn list_plugins(state: State<AppState>) -> Result<PluginList, String> {
     state.with_engine(|e| e.list_plugins())
@@ -627,6 +723,8 @@ fn main() {
             list_save_files,
             open_folder,
             reveal_file,
+            check_for_update,
+            open_url,
             list_plugins,
             set_plugin_enabled,
             set_plugin_commands_allowed,
