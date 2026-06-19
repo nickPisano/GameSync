@@ -50,7 +50,8 @@ const PREF_KEY = "gamesync-theme";
 const CUSTOM_KEY = "gamesync-custom-themes";
 
 export function getPreference(): string {
-  return localStorage.getItem(PREF_KEY) ?? "midnight";
+  // Default to following the OS light/dark setting until the user picks a theme.
+  return localStorage.getItem(PREF_KEY) ?? "auto";
 }
 
 export function loadCustomThemes(): CustomTheme[] {
