@@ -44,6 +44,9 @@ export interface CustomTheme {
   id: string;
   name: string;
   colors: Palette;
+  /** Optional self-supplied preview: any CSS background value (gradient, solid
+   *  color, or a `data:` image URL). Falls back to a generated bg+accent swatch. */
+  swatch?: string;
 }
 
 const PREF_KEY = "gamesync-theme";
@@ -112,6 +115,17 @@ function slug(name: string): string {
 
 const REQUIRED: ColorKey[] = ["bg", "panel", "border", "text", "muted", "accent"];
 
+const MAX_SWATCH_LEN = 64 * 1024;
+
+/** A theme may ship its own preview as a CSS background (gradient, solid color,
+ *  or a `data:` image URL). Reject anything that would load an external
+ *  resource — only `url(data:…)` is allowed, never `url(http…)` / `url(file…)`. */
+function isSafeSwatch(s: string): boolean {
+  if (s.length > MAX_SWATCH_LEN) return false;
+  const urls = s.match(/url\([^)]*\)/gi) ?? [];
+  return urls.every((u) => /^url\(\s*['"]?data:/i.test(u));
+}
+
 /** Parse + validate an imported theme JSON, store it, and return it. Throws an
  *  Error with a friendly message on bad input. */
 export function importThemeFromJson(text: string): CustomTheme {
@@ -149,6 +163,10 @@ export function importThemeFromJson(text: string): CustomTheme {
   while (customs.some((t) => t.id === id)) id = `${base}-${++n}`;
 
   const theme: CustomTheme = { id, name, colors };
+  const swatch = obj.swatch;
+  if (typeof swatch === "string" && swatch.trim() && isSafeSwatch(swatch.trim())) {
+    theme.swatch = swatch.trim();
+  }
   customs.push(theme);
   saveCustomThemes(customs);
   return theme;
@@ -160,5 +178,13 @@ export function removeCustomTheme(id: string) {
 
 /** A ready-to-edit template string for the import box. */
 export function themeTemplate(): string {
-  return JSON.stringify({ name: "My theme", colors: MIDNIGHT }, null, 2);
+  return JSON.stringify(
+    {
+      name: "My theme",
+      colors: MIDNIGHT,
+      swatch: "linear-gradient(135deg, #4f8cff 0 50%, #0f1216 50% 100%)",
+    },
+    null,
+    2,
+  );
 }

@@ -3,16 +3,8 @@ import { Modal } from "./Modal";
 import { api } from "../api";
 import type { LanHostInfo, StorageReport, UpdateInfo, VerifyResult } from "../types";
 import { humanSize } from "../format";
-import {
-  applyTheme,
-  getPreference,
-  BUILTIN,
-  loadCustomThemes,
-  importThemeFromJson,
-  removeCustomTheme,
-  themeTemplate,
-  type CustomTheme,
-} from "../theme";
+import { applyTheme, getPreference, BUILTIN, loadCustomThemes, type CustomTheme } from "../theme";
+import { ThemeModal } from "./ThemeModal";
 
 interface Props {
   onClose: () => void;
@@ -119,33 +111,11 @@ export function SettingsModal({ onClose, notify, encrypted, onEnableEncryption }
   }
   const [pref, setPref] = useState<string>(getPreference());
   const [customs, setCustoms] = useState<CustomTheme[]>(loadCustomThemes());
-  const [importOpen, setImportOpen] = useState(false);
-  const [importText, setImportText] = useState("");
-  const [importErr, setImportErr] = useState<string | null>(null);
+  const [themeOpen, setThemeOpen] = useState(false);
 
   function choosePref(p: string) {
     applyTheme(p);
     setPref(p);
-  }
-
-  function doImport() {
-    try {
-      const t = importThemeFromJson(importText);
-      setCustoms(loadCustomThemes());
-      choosePref(`custom:${t.id}`);
-      setImportOpen(false);
-      setImportText("");
-      setImportErr(null);
-      notify(`Imported theme "${t.name}".`);
-    } catch (e) {
-      setImportErr(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  function deleteCustom(id: string) {
-    removeCustomTheme(id);
-    setCustoms(loadCustomThemes());
-    if (pref === `custom:${id}`) choosePref("midnight");
   }
 
   useEffect(() => {
@@ -223,64 +193,21 @@ export function SettingsModal({ onClose, notify, encrypted, onEnableEncryption }
       </div>
 
       <div className="more-themes">
-        <label className="muted small" htmlFor="more-theme-select">
-          More
-        </label>
-        <select
-          id="more-theme-select"
-          value={pref === "auto" || pref.startsWith("custom:") ? pref : ""}
-          onChange={(e) => e.target.value && choosePref(e.target.value)}
-        >
-          <option value="">More themes…</option>
-          <option value="auto">Auto (system light/dark)</option>
-          {customs.length > 0 && (
-            <optgroup label="Custom">
-              {customs.map((t) => (
-                <option key={t.id} value={`custom:${t.id}`}>
-                  {t.name}
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </select>
-        <button
-          className="secondary"
-          onClick={() => {
-            setImportOpen(true);
-            setImportText(themeTemplate());
-            setImportErr(null);
-          }}
-        >
-          Import…
+        <button className="secondary" onClick={() => setThemeOpen(true)}>
+          More themes…
         </button>
-        {pref.startsWith("custom:") && (
-          <button className="secondary" onClick={() => deleteCustom(pref.slice("custom:".length))}>
-            Remove
-          </button>
-        )}
+        <span className="muted small">Auto (follow system), custom imports &amp; the full gallery</span>
       </div>
 
-      {importOpen && (
-        <div className="import-theme">
-          <p className="muted small">
-            Paste a theme as JSON — a <code>name</code> and a <code>colors</code>{" "}
-            object (keys: bg, panel, panel-2, border, text, muted, accent,
-            accent-hover, ok, err, warn). The template below is pre-filled.
-          </p>
-          <textarea
-            rows={10}
-            value={importText}
-            onChange={(e) => setImportText(e.target.value)}
-            spellCheck={false}
-          />
-          {importErr && <div className="error">{importErr}</div>}
-          <div className="modal-foot">
-            <button className="secondary" onClick={() => setImportOpen(false)}>
-              Cancel
-            </button>
-            <button onClick={doImport}>Import</button>
-          </div>
-        </div>
+      {themeOpen && (
+        <ThemeModal
+          pref={pref}
+          customs={customs}
+          onChoose={choosePref}
+          onCustomsChanged={setCustoms}
+          notify={notify}
+          onClose={() => setThemeOpen(false)}
+        />
       )}
 
       <h3 className="settings-h">Game detection</h3>

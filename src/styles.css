@@ -885,6 +885,14 @@ button .sync-spinner {
 .theme-swatch-auto {
   background: linear-gradient(135deg, #f6f7f9 0 50%, #0f1216 50% 100%) !important;
 }
+/* A theme that supplied its own swatch (image/gradient) — show it as-is. */
+.theme-swatch-custom {
+  background-size: cover !important;
+  background-position: center !important;
+}
+.theme-swatch-custom::after {
+  display: none;
+}
 .more-themes {
   display: flex;
   align-items: center;

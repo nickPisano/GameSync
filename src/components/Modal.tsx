@@ -7,14 +7,24 @@ interface Props {
   wide?: boolean;
 }
 
+// Stack of open modals so Escape only dismisses the top-most one.
+const openModals: Array<() => void> = [];
+
 export function Modal({ title, onClose, children, wide }: Props) {
-  // Close on Escape — standard modal behaviour.
+  // Close on Escape — but only if this is the front-most modal.
   useEffect(() => {
+    openModals.push(onClose);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && openModals[openModals.length - 1] === onClose) {
+        onClose();
+      }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      const i = openModals.lastIndexOf(onClose);
+      if (i >= 0) openModals.splice(i, 1);
+    };
   }, [onClose]);
 
   return (
