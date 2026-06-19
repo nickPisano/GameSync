@@ -6,5 +6,6 @@ pub mod gog;
 pub mod ludusavi;
 pub mod manifest;
 pub mod paths;
+pub mod standalone;
 pub mod steam;
 pub mod vdf;

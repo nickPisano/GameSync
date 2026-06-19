@@ -123,6 +123,18 @@ On **Scan**, GameSync also auto-detects these emulators' save directories:
 - Ryujinx (Switch)
 - ScummVM
 
+## Standalone games (2)
+
+Non-store titles (free / itch.io / modpacks) have no Steam/GOG/Epic id, so they're
+detected by probing their fixed save folder — added automatically on **Scan** when
+that folder exists:
+
+- Voices of the Void — `%LOCALAPPDATA%\VotV\Saved\SaveGames`
+- S.T.A.L.K.E.R. G.A.M.M.A. — best-effort: common install paths such as
+  `C:\G.A.M.M.A\Anomaly\appdata\savedgames`. GAMMA installs to a folder *you*
+  pick, so if yours lives elsewhere (another drive, etc.) it won't auto-detect —
+  just use **Add game** and point at your `…\Anomaly\appdata\savedgames`.
+
 ## Don't see your game?
 
 - **Pull the big list (in-app):** **Settings → Game detection → Update game

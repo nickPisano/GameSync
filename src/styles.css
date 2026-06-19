@@ -523,6 +523,11 @@ input[type="radio"] {
   background: color-mix(in srgb, #c08cff 15%, transparent);
   border-color: color-mix(in srgb, #c08cff 28%, transparent);
 }
+.badge-standalone {
+  color: #5dcca5;
+  background: color-mix(in srgb, #5dcca5 15%, transparent);
+  border-color: color-mix(in srgb, #5dcca5 28%, transparent);
+}
 .badge-epic {
   color: #cfcfcf;
   background: color-mix(in srgb, #cfcfcf 14%, transparent);

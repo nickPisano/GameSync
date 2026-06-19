@@ -11,7 +11,7 @@ use crate::crypto::{Dek, KeyStore, RecoveryKey};
 use crate::db::Db;
 use crate::detection::emulators::EmulatorRule;
 use crate::detection::manifest::SaveRule;
-use crate::detection::{emulators, epic, gog, ludusavi, manifest, steam};
+use crate::detection::{emulators, epic, gog, ludusavi, manifest, standalone, steam};
 use crate::error::{Error, Result};
 use crate::model::{Game, Head, Platform, Snapshot, SnapshotKind};
 use crate::plugins;
@@ -374,6 +374,30 @@ impl Engine {
         Ok(found)
     }
 
+    /// Detect standalone (non-store) games — free/itch/modpack titles with no
+    /// store id — by probing their fixed save folder. Reuses the emulator
+    /// path-probe; a game is added only if its save folder exists.
+    pub fn scan_standalone(&self) -> Result<Vec<Game>> {
+        let mut found = Vec::new();
+        for d in emulators::detect_from(&standalone::bundled_rules()) {
+            let id = format!("standalone:{}", d.key);
+            let previous = self.db.get_game(&id).ok();
+            let game = Game {
+                id,
+                name: d.name,
+                platform: Platform::Standalone,
+                save_root: d.save_root,
+                install_dir: None,
+                includes: default_includes(),
+                excludes: default_excludes(),
+                sync_enabled: previous.map(|p| p.sync_enabled).unwrap_or(false),
+            };
+            self.db.upsert_game(&game)?;
+            found.push(game);
+        }
+        Ok(found)
+    }
+
     /// Scan GOG games under the default library roots ([`gog::library_roots`]).
     /// Saves are resolved by matching each game's name into the save manifest.
     pub fn scan_gog(&self) -> Result<Vec<Game>> {
@@ -462,6 +486,7 @@ impl Engine {
         found.extend(self.scan_gog()?);
         found.extend(self.scan_epic()?);
         found.extend(self.scan_emulators()?);
+        found.extend(self.scan_standalone()?);
         Ok(found)
     }
 

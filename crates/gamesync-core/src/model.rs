@@ -29,6 +29,7 @@ pub enum Platform {
     Gog,
     Epic,
     Emulator,
+    Standalone,
     Manual,
 }
 
@@ -39,6 +40,7 @@ impl Platform {
             Platform::Gog => "gog",
             Platform::Epic => "epic",
             Platform::Emulator => "emulator",
+            Platform::Standalone => "standalone",
             Platform::Manual => "manual",
         }
     }
@@ -51,6 +53,7 @@ impl Platform {
             "gog" => Platform::Gog,
             "epic" => Platform::Epic,
             "emulator" => Platform::Emulator,
+            "standalone" => Platform::Standalone,
             _ => Platform::Manual,
         }
     }

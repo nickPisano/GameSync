@@ -1,6 +1,6 @@
 // Mirrors the serde shapes from gamesync-core. Kept in sync by hand.
 
-export type Platform = "steam" | "gog" | "epic" | "emulator" | "manual";
+export type Platform = "steam" | "gog" | "epic" | "emulator" | "standalone" | "manual";
 export type SnapshotKind = "manual" | "auto" | "pre_restore";
 
 export interface Game {
