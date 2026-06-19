@@ -136,7 +136,7 @@ card showing its platform, save path, version count, and last-backup time.
 2. GameSync detects installed **Steam**, **GOG (Galaxy)**, and **Epic** games
    with known save paths, plus common **emulators** and select **standalone**
    titles (free/itch/modpacks like *Voices of the Void*). Out of the box it
-   recognizes **~70 games, 10 emulators, and more** — see the full built-in list
+   recognizes **~70 games, 11 emulators, and more** — see the full built-in list
    in **[docs/GAMES.md](docs/GAMES.md)**.
 3. Detected games appear as cards. (GOG/Epic games are matched to save paths by
    title, since those stores carry no Steam app id.)

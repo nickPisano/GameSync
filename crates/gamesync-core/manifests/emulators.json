@@ -80,6 +80,15 @@
         "{APPSUPPORT}/ScummVM/Savegames",
         "{HOME}/.local/share/scummvm/saves"
       ]
+    },
+    "shadps4": {
+      "name": "shadPS4 (PlayStation 4)",
+      "paths": [
+        "{APPDATA}/shadPS4/savedata",
+        "{APPDATA}/shadPS4/user/savedata",
+        "{XDG_DATA}/shadPS4/savedata",
+        "{APPSUPPORT}/shadPS4/savedata"
+      ]
     }
   }
 }

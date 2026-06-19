@@ -108,7 +108,7 @@ by title (those stores carry no Steam app id locally).
 - Castle Crashers
 - Amnesia: A Machine for Pigs
 
-## Emulators (10)
+## Emulators (11)
 
 On **Scan**, GameSync also auto-detects these emulators' save directories:
 
@@ -122,6 +122,7 @@ On **Scan**, GameSync also auto-detects these emulators' save directories:
 - yuzu (Switch)
 - Ryujinx (Switch)
 - ScummVM
+- shadPS4 (PlayStation 4)
 
 ## Standalone games (2)
 
