@@ -94,6 +94,25 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+          # Steer non-technical users to the right asset. Same text in every
+          # matrix job (idempotent); shown as the release description above the
+          # asset list. Files are named by suffix so this stays version-correct.
+          releaseBody: |
+            ## Which file should I download?
+
+            Not sure? Most people just want the **installer** for their system:
+
+            | Your computer | Download this file |
+            | --- | --- |
+            | **Windows** (most PCs) | the file ending in **`_x64-setup.exe`** |
+            | **Windows on ARM** | **`_arm64-setup.exe`** |
+            | **macOS** (Intel *or* Apple Silicon) | **`_universal.dmg`** |
+            | **Linux** (most distros) | **`_amd64.AppImage`** (run `chmod +x` on it, then launch) |
+            | **Linux on ARM** | **`_aarch64.AppImage`** |
+
+            **Prefer no install?** On Windows grab the `...-portable.exe` and just double-click it; the Linux `.AppImage` is already portable. **Debian/Ubuntu** can use the `.deb`, **Fedora/RHEL** the `.rpm`; the `.msi` is mainly for managed/enterprise installs.
+
+            > These builds are unsigned, so on first launch Windows SmartScreen or macOS Gatekeeper may warn you. Choose **More info -> Run anyway** (Windows) or right-click the app -> **Open** (macOS). Not sure if you need x64 or ARM? On Windows see **Settings -> System -> About -> System type**.
 
       # tauri-action attaches the installers (.msi/.exe/.deb/.rpm/.AppImage/.dmg)
       # but not the raw Windows executable, which is the "portable" build.
