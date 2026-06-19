@@ -12,6 +12,7 @@ a website — it has to run on your machine.
 ## Contents
 
 - [Install & run](#install--run) — [download a build](#download-a-prebuilt-build-recommended) · [build from source](#build-from-source)
+- [Supported games](docs/GAMES.md) — ~70 built in, ~17,000 via in-app update
 - **Tutorials**
   - [First-time setup](#tutorial-first-time-setup)
   - [Find & add games](#tutorial-find--add-games) — Scan · Add game · Update game list
@@ -132,10 +133,16 @@ card showing its platform, save path, version count, and last-backup time.
 
 1. Click **Scan** in the toolbar.
 2. GameSync detects installed **Steam**, **GOG (Galaxy)**, and **Epic** games
-   with known save paths, plus common **emulators** (Dolphin, PCSX2, RPCS3,
-   PPSSPP, DuckStation, RetroArch).
+   with known save paths, plus common **emulators**. Out of the box it
+   recognizes **~70 popular games and 10 emulators** — see the full built-in
+   list in **[docs/GAMES.md](docs/GAMES.md)**.
 3. Detected games appear as cards. (GOG/Epic games are matched to save paths by
    title, since those stores carry no Steam app id.)
+
+> That built-in list is just a starter set. You can pull a database of
+> **~17,000 games right inside the app** — no reinstall — via **Settings → Game
+> detection → Update game list**; see [Recognize more
+> games](#recognize-more-games-update-game-list) below.
 
 ### Add a game manually
 
@@ -150,11 +157,12 @@ For anything not auto-detected:
 
 ### Recognize more games (Update game list)
 
-GameSync ships with a small curated list. To recognize thousands more:
+GameSync ships with a [curated starter list](docs/GAMES.md) (~70 games + 10
+emulators). To recognize thousands more — **right inside the app, no reinstall**:
 
 1. Open **Settings → Game detection**.
-2. Click **Update game list** — it downloads the community manifest
-   (PCGamingWiki via Ludusavi, ~17,000 games).
+2. Click **Update game list** — the app downloads the full community manifest
+   (PCGamingWiki via Ludusavi, **~17,000 games**) and stores it locally.
 3. The detected-game count updates. Run **Scan** again to pick up newly
    recognized titles. *(CLI: `gamesync update-list`.)*
 
