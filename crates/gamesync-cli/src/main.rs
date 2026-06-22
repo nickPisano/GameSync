@@ -32,6 +32,7 @@ fn main() {
         "sync" => cmd_sync(&args[1..]),
         "resolve" => cmd_resolve(&args[1..]),
         "serve-lan" => cmd_serve_lan(&args[1..]),
+        "discover-lan" => cmd_discover_lan(&args[1..]),
         "verify" => cmd_verify(),
         "encrypt-init" => cmd_encrypt_init(),
         "encrypt-status" => cmd_encrypt_status(),
@@ -405,17 +406,42 @@ fn cmd_serve_lan(args: &[String]) -> Result<(), String> {
     let handle = Engine::serve_lan(dir.clone(), &token, &format!("0.0.0.0:{port}"))
         .map_err(|e| e.to_string())?;
     let ip = Engine::local_ip().unwrap_or_else(|| "127.0.0.1".to_string());
+    // Advertise on the LAN so peers can find this host without typing the
+    // address (`gamesync discover-lan`). The token is never broadcast.
+    let host_name = Engine::lan_hostname();
+    let _beacon = Engine::announce_lan(&host_name, handle.port).map_err(|e| e.to_string())?;
 
-    println!("Hosting GameSync on this network:");
+    println!("Hosting GameSync on this network as \"{host_name}\":");
     println!("  dir:   {}", dir.display());
     println!("  addr:  {ip}:{}", handle.port);
     println!("  token: {token}\n");
-    println!("On another device, set the remote to:");
+    println!("On another device, run `gamesync discover-lan` to find this host,");
+    println!("then set the remote to:");
     println!("  lan:{token}@{ip}:{}\n", handle.port);
     println!("Press Ctrl-C to stop hosting.");
     loop {
         std::thread::sleep(std::time::Duration::from_secs(3600));
     }
+}
+
+fn cmd_discover_lan(args: &[String]) -> Result<(), String> {
+    let secs: u64 = flag_value(args, "--seconds")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3);
+    println!("Searching the local network for GameSync hosts ({secs}s)…");
+    let hosts = Engine::discover_lan(secs * 1000).map_err(|e| e.to_string())?;
+    if hosts.is_empty() {
+        println!("No hosts found. Make sure a device is running `gamesync serve-lan`");
+        println!("on the same network.");
+        return Ok(());
+    }
+    println!("Found {} host(s):", hosts.len());
+    for h in &hosts {
+        println!("  {:<20} {}", h.name, h.endpoint());
+    }
+    println!("\nSet your remote with the token shown on that host:");
+    println!("  gamesync remote set lan:<token>@<addr:port>");
+    Ok(())
 }
 
 fn cmd_verify() -> Result<(), String> {
@@ -522,6 +548,7 @@ COMMANDS:
                                  Resolve a sync conflict by choosing a side
     serve-lan [--port N] [--token T] [--dir D]
                                  Host this device's saves over the LAN for peers
+    discover-lan [--seconds N]   Find LAN hosts advertising on this network
     verify                       Re-hash all stored objects and report problems
     encrypt-init                 Enable client-side encryption (needs GAMESYNC_PASSPHRASE)
     encrypt-status               Show whether the store is encrypted

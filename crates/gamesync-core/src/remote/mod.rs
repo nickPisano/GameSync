@@ -17,7 +17,7 @@ use crate::error::Result;
 use crate::model::{Head, Snapshot};
 
 pub use folder::FolderRemote;
-pub use lan::{LanRemote, LanServerHandle};
+pub use lan::{BeaconHandle, DiscoveredHost, LanRemote, LanServerHandle};
 pub use rclone::RcloneRemote;
 
 /// Held for the duration of a sync; runs a transport-specific cleanup (e.g.

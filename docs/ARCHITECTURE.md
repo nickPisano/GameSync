@@ -110,8 +110,11 @@ The configured remote spec selects the transport: `rclone:<target>` (e.g.
 TCP; peers connect with a shared token); anything else is a folder path
 (`FolderRemote`). On conflict the remote version is pulled into local history, so
 the UI's **diff preview** (`diff(local, remote)`) works offline before the user
-resolves. Still to come: LAN host **auto-discovery** (mDNS/UDP) — today the peer
-enters the host's address — and "keep both as a fork".
+resolves. A LAN host also **advertises itself** (`lan::announce` UDP-broadcasts
+a name + TCP port beacon; `lan::discover` listens), so peers find it via **Find
+hosts** / `discover-lan` instead of typing an address — the pairing token is
+never broadcast and is still supplied to connect. Still to come: "keep both as a
+fork".
 
 ## Roadmap
 
@@ -133,7 +136,9 @@ enters the host's address — and "keep both as a fork".
 - **Phase 3 (mostly done):** ✅ version-vector conflict model + resolution,
   ✅ rclone provider support (`RcloneRemote`), ✅ LAN peer-to-peer transport
   (`LanRemote` + `lan::serve`, host UI in Settings), ✅ conflict **diff preview**
-  before resolving. Remaining: LAN host auto-discovery, "keep both as a fork".
+  before resolving, ✅ **LAN host auto-discovery** (UDP-broadcast beacon —
+  `announce`/`discover`, **Find hosts** in the UI + `discover-lan` CLI).
+  Remaining: "keep both as a fork".
 - **Phase 4 (partly done):** ✅ **fault-injection tests** (a corrupt, missing, or
   tampered CAS object aborts restore at the verify gate without touching the live
   save, leaves no temp dirs, keeps the pre-restore safety snapshot recoverable,

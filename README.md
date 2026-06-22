@@ -268,12 +268,18 @@ If you have [rclone](https://rclone.org) installed and configured (`rclone confi
 ### Sync over your local network (LAN, no cloud)
 
 1. On the **host** device, open **Settings → LAN sync → Host on this network**.
-2. Copy the connect string it shows, e.g. `lan:<token>@192.168.1.5:51234`.
-3. On the **other** device, paste that into the **Remote** bar and sync — saves
-   transfer directly between the two machines.
+   It starts serving and shows a **token**.
+2. On the **other** device, click **Find hosts** in the **Remote** bar — the
+   host appears by name; click it to fill in its address. (No host found? Make
+   sure both are on the same network; on macOS, allow GameSync **Local Network**
+   access when first prompted.)
+3. Insert the host's **token** right after `lan:` (so the remote reads
+   `lan:<token>@<host>:<port>`), click **Save**, and sync — saves transfer
+   directly between the two machines. You can also paste the full connect string
+   the host shows instead of using Find hosts.
 
-*(CLI: `gamesync serve-lan` on the host, then
-`gamesync remote set lan:<token>@<host>:<port>` on the peer.)*
+*(CLI: `gamesync serve-lan` on the host, `gamesync discover-lan` to find hosts,
+then `gamesync remote set lan:<token>@<host>:<port>` on the peer.)*
 
 ### Live-sync via your cloud client (Redirect to synced folder)
 

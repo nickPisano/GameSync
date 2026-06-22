@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, pickFolder } from "./api";
-import type { AppStatus, AutoSyncReport, Game, GameView, SyncOutcome } from "./types";
+import type {
+  AppStatus,
+  AutoSyncReport,
+  DiscoveredHost,
+  Game,
+  GameView,
+  SyncOutcome,
+} from "./types";
 import { GameCard } from "./components/GameCard";
 import { SyncSpinner } from "./components/SyncSpinner";
 import { Lock } from "./components/Lock";
@@ -47,6 +54,9 @@ export function App() {
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // LAN host auto-discovery (peer side): found hosts + in-flight flag.
+  const [lanHosts, setLanHosts] = useState<DiscoveredHost[] | null>(null);
+  const [discovering, setDiscovering] = useState(false);
 
   const notify = useCallback((msg: string, kind: "ok" | "err" = "ok") => {
     setToast({ msg, kind });
@@ -271,6 +281,31 @@ export function App() {
     });
   }
 
+  // Listen on the LAN for hosts advertising themselves (a couple of seconds).
+  async function onDiscoverLan() {
+    setDiscovering(true);
+    setLanHosts(null);
+    try {
+      const hosts = await api.discoverLanHosts();
+      setLanHosts(hosts);
+      if (hosts.length === 0) {
+        notify("No LAN hosts found. Start hosting on another device first.", "err");
+      }
+    } catch (e) {
+      notify(String(e), "err");
+    } finally {
+      setDiscovering(false);
+    }
+  }
+
+  // Discovery gives the address; the token (shown on the host) is still needed,
+  // so we prefill the spec with an empty token for the user to fill in.
+  function pickLanHost(h: DiscoveredHost) {
+    setRemoteInput(`lan:@${h.addr}:${h.port}`);
+    setLanHosts(null);
+    notify(`Selected ${h.name} — add the host's token between "lan:" and "@", then Save.`);
+  }
+
   // ---- gating screens --------------------------------------------------
 
   if (!status) {
@@ -362,6 +397,14 @@ export function App() {
         >
           Browse…
         </button>
+        <button
+          className="secondary"
+          onClick={onDiscoverLan}
+          disabled={discovering}
+          title="Find GameSync hosts on your local network"
+        >
+          {discovering ? "Searching…" : "Find hosts"}
+        </button>
         <button onClick={onSaveRemote} disabled={busyId === "__remote"}>
           Save
         </button>
@@ -369,6 +412,25 @@ export function App() {
           {remote ? "configured" : "not set"}
         </span>
       </div>
+
+      {lanHosts && lanHosts.length > 0 && (
+        <div className="lan-hosts">
+          <span className="lan-hosts-label">LAN hosts found — pick one, then add its token:</span>
+          {lanHosts.map((h) => (
+            <button
+              key={`${h.addr}:${h.port}`}
+              className="lan-host"
+              onClick={() => pickLanHost(h)}
+              title={`Use ${h.addr}:${h.port}`}
+            >
+              <strong>{h.name}</strong>
+              <span className="muted">
+                {h.addr}:{h.port}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {conflict && (
         <div className="conflict-banner">

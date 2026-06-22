@@ -11,7 +11,7 @@
 //! fine for save-sized files (streaming/base64 is a future refinement).
 
 use std::io::{self, Read, Write};
-use std::net::{TcpListener, TcpStream, UdpSocket};
+use std::net::{Ipv4Addr, TcpListener, TcpStream, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -358,4 +358,190 @@ pub fn local_ip() -> Option<String> {
     let sock = UdpSocket::bind("0.0.0.0:0").ok()?;
     sock.connect("8.8.8.8:80").ok()?;
     sock.local_addr().ok().map(|a| a.ip().to_string())
+}
+
+// ---- discovery ----------------------------------------------------------
+//
+// A host periodically UDP-broadcasts a small beacon advertising its name and
+// TCP port; peers listen for beacons to find hosts without typing an address.
+// The pairing **token is never broadcast** — discovery removes the address
+// friction, but a peer still supplies the token (shown on the host) to connect.
+
+/// Well-known UDP port the beacon is broadcast on / listened for.
+const BEACON_PORT: u16 = 51900;
+/// Tag on every beacon so we ignore unrelated traffic on the port.
+const BEACON_MAGIC: &str = "gamesync-lan-1";
+
+#[derive(Serialize, Deserialize)]
+struct Beacon {
+    magic: String,
+    name: String,
+    port: u16,
+}
+
+/// A LAN host found via [`discover`]. `addr` is taken from the packet's source
+/// IP (not self-reported), so it's the address a peer should actually dial.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiscoveredHost {
+    pub name: String,
+    pub addr: String,
+    pub port: u16,
+}
+
+impl DiscoveredHost {
+    /// The `host:port` a [`LanRemote`] connects to (the token is added by the UI).
+    pub fn endpoint(&self) -> String {
+        format!("{}:{}", self.addr, self.port)
+    }
+}
+
+/// A running beacon broadcaster. Dropping it (or [`stop`](Self::stop)) ends it.
+pub struct BeaconHandle {
+    stop: Arc<AtomicBool>,
+}
+
+impl BeaconHandle {
+    pub fn stop(&self) {
+        self.stop.store(true, Ordering::SeqCst);
+    }
+}
+
+impl Drop for BeaconHandle {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+/// Sleep up to `total` in short slices, returning early if `stop` is set.
+fn interruptible_sleep(stop: &AtomicBool, total: Duration) {
+    let slice = Duration::from_millis(100);
+    let mut left = total;
+    while left > Duration::ZERO {
+        if stop.load(Ordering::SeqCst) {
+            return;
+        }
+        let nap = slice.min(left);
+        std::thread::sleep(nap);
+        left = left.saturating_sub(nap);
+    }
+}
+
+/// Start broadcasting a beacon for a host named `name` serving on TCP `port`.
+/// Broadcasts on the well-known beacon port until the handle is dropped.
+pub fn announce(name: String, port: u16) -> Result<BeaconHandle> {
+    announce_on(name, port, BEACON_PORT)
+}
+
+fn announce_on(name: String, port: u16, beacon_port: u16) -> Result<BeaconHandle> {
+    let sock = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?;
+    sock.set_broadcast(true)?;
+    let payload = serde_json::to_vec(&Beacon {
+        magic: BEACON_MAGIC.to_string(),
+        name,
+        port,
+    })?;
+    let stop = Arc::new(AtomicBool::new(false));
+    let stop_thread = stop.clone();
+    std::thread::spawn(move || {
+        while !stop_thread.load(Ordering::SeqCst) {
+            let _ = sock.send_to(&payload, (Ipv4Addr::BROADCAST, beacon_port));
+            interruptible_sleep(&stop_thread, Duration::from_millis(800));
+        }
+    });
+    Ok(BeaconHandle { stop })
+}
+
+/// Listen for host beacons for `timeout`, returning each unique host once.
+pub fn discover(timeout: Duration) -> Result<Vec<DiscoveredHost>> {
+    discover_on(BEACON_PORT, timeout)
+}
+
+fn discover_on(beacon_port: u16, timeout: Duration) -> Result<Vec<DiscoveredHost>> {
+    let sock = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, beacon_port))?;
+    sock.set_broadcast(true).ok();
+    sock.set_read_timeout(Some(Duration::from_millis(250)))?;
+    let deadline = std::time::Instant::now() + timeout;
+    let mut found: Vec<DiscoveredHost> = Vec::new();
+    let mut buf = [0u8; 2048];
+    while std::time::Instant::now() < deadline {
+        match sock.recv_from(&mut buf) {
+            Ok((n, src)) => {
+                if let Ok(b) = serde_json::from_slice::<Beacon>(&buf[..n]) {
+                    if b.magic == BEACON_MAGIC {
+                        let host = DiscoveredHost {
+                            name: b.name,
+                            addr: src.ip().to_string(),
+                            port: b.port,
+                        };
+                        if !found
+                            .iter()
+                            .any(|h| h.addr == host.addr && h.port == host.port)
+                        {
+                            found.push(host);
+                        }
+                    }
+                }
+            }
+            Err(ref e)
+                if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut => {
+            }
+            Err(_) => break,
+        }
+    }
+    Ok(found)
+}
+
+/// This device's hostname (a friendly label for the beacon), or a fallback.
+pub fn hostname() -> String {
+    std::process::Command::new("hostname")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().trim_end_matches(".local").to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "GameSync host".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn beacon_round_trips_and_rejects_foreign_packets() {
+        let bytes = serde_json::to_vec(&Beacon {
+            magic: BEACON_MAGIC.to_string(),
+            name: "Test-PC".into(),
+            port: 5000,
+        })
+        .unwrap();
+        let b: Beacon = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(b.magic, BEACON_MAGIC);
+        assert_eq!(b.port, 5000);
+        // Random/foreign UDP payloads must not parse as a beacon.
+        assert!(serde_json::from_slice::<Beacon>(b"hello world").is_err());
+    }
+
+    #[test]
+    fn hostname_is_nonempty() {
+        assert!(!hostname().is_empty());
+    }
+
+    #[test]
+    fn discover_finds_an_announced_host() {
+        // Use an unusual beacon port so this doesn't clash with the real one or
+        // other tests. Broadcasts loop back to local listeners on the same host.
+        let port = 51987;
+        let _beacon = announce_on("Loopback-Host".into(), 4321, port).unwrap();
+        // Poll for up to ~3s; the first broadcast goes out immediately.
+        let hosts = discover_on(port, Duration::from_millis(3000)).unwrap();
+        if hosts.is_empty() {
+            // Some sandboxes block UDP broadcast entirely — don't false-fail.
+            eprintln!("skip: UDP broadcast not delivered in this environment");
+            return;
+        }
+        let h = hosts.iter().find(|h| h.port == 4321).expect("our host");
+        assert_eq!(h.name, "Loopback-Host");
+        assert!(!h.addr.is_empty());
+        assert!(h.endpoint().ends_with(":4321"));
+    }
 }

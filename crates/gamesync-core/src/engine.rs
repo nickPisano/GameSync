@@ -1102,6 +1102,23 @@ impl Engine {
         lan::local_ip()
     }
 
+    /// Broadcast a discovery beacon so peers can find this host without typing
+    /// its address. `name` is a friendly label; `port` is the LAN host's TCP
+    /// port. The token is never broadcast. Keep the handle alive while hosting.
+    pub fn announce_lan(name: &str, port: u16) -> Result<lan::BeaconHandle> {
+        lan::announce(name.to_string(), port)
+    }
+
+    /// Listen for host beacons for `timeout_ms`, returning the hosts found.
+    pub fn discover_lan(timeout_ms: u64) -> Result<Vec<lan::DiscoveredHost>> {
+        lan::discover(std::time::Duration::from_millis(timeout_ms))
+    }
+
+    /// A friendly label for this device (its hostname), for the beacon.
+    pub fn lan_hostname() -> String {
+        lan::hostname()
+    }
+
     pub fn compression_enabled(&self) -> bool {
         self.cas.compress_enabled()
     }

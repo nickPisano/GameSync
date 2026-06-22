@@ -13,9 +13,9 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use gamesync_core::{
-    AutoSyncReport, AutoSyncSettings, BackupOptions, ConflictChoice, Diff, Engine, Game, GcReport,
-    LanServerHandle, PluginList, RedirectReport, RetentionPolicy, SaveFile, SnapshotKind,
-    StorageReport, SyncOutcome, ViewerInfo,
+    AutoSyncReport, AutoSyncSettings, BackupOptions, BeaconHandle, ConflictChoice, Diff,
+    DiscoveredHost, Engine, Game, GcReport, LanServerHandle, PluginList, RedirectReport,
+    RetentionPolicy, SaveFile, SnapshotKind, StorageReport, SyncOutcome, ViewerInfo,
 };
 use serde::Serialize;
 use tauri::menu::{Menu, MenuItem};
@@ -32,6 +32,8 @@ struct AppState {
 /// server when dropped.
 struct LanHostState {
     _handle: LanServerHandle,
+    // Broadcasts the discovery beacon; dropped (stopped) when hosting stops.
+    _beacon: BeaconHandle,
     info: LanHostInfo,
 }
 
@@ -532,6 +534,10 @@ fn start_lan_host(state: State<AppState>) -> Result<LanHostInfo, String> {
     let handle = Engine::serve_lan(share, &token, "0.0.0.0:0").map_err(|e| e.to_string())?;
     let ip = Engine::local_ip().unwrap_or_else(|| "127.0.0.1".to_string());
     let port = handle.port;
+    // Advertise on the LAN so peers can find this host without typing the
+    // address. The token is not broadcast — peers still supply it to connect.
+    let host_name = Engine::lan_hostname();
+    let beacon = Engine::announce_lan(&host_name, port).map_err(|e| e.to_string())?;
     let info = LanHostInfo {
         hosting: true,
         spec: Some(format!("lan:{token}@{ip}:{port}")),
@@ -541,9 +547,17 @@ fn start_lan_host(state: State<AppState>) -> Result<LanHostInfo, String> {
     };
     *state.lan.lock().unwrap() = Some(LanHostState {
         _handle: handle,
+        _beacon: beacon,
         info: info.clone(),
     });
     Ok(info)
+}
+
+/// Listen for LAN host beacons for a couple of seconds and return the hosts
+/// found, so a peer can pick one instead of typing its address.
+#[tauri::command]
+fn discover_lan_hosts() -> Result<Vec<DiscoveredHost>, String> {
+    Engine::discover_lan(2500).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -744,7 +758,8 @@ fn main() {
             set_compression,
             start_lan_host,
             stop_lan_host,
-            lan_host_status
+            lan_host_status,
+            discover_lan_hosts
         ])
         .setup(|app| {
             // ---- system tray ----

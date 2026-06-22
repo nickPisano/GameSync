@@ -172,3 +172,9 @@ export interface LanHostInfo {
   token: string | null;
   spec: string | null;
 }
+
+export interface DiscoveredHost {
+  name: string;
+  addr: string;
+  port: number;
+}

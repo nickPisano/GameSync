@@ -7,6 +7,7 @@ import type {
   AutoSyncReport,
   AutoSyncSettings,
   Diff,
+  DiscoveredHost,
   Game,
   GameView,
   GcReport,
@@ -96,4 +97,5 @@ export const api = {
   startLanHost: () => invoke<LanHostInfo>("start_lan_host"),
   stopLanHost: () => invoke<LanHostInfo>("stop_lan_host"),
   lanHostStatus: () => invoke<LanHostInfo>("lan_host_status"),
+  discoverLanHosts: () => invoke<DiscoveredHost[]>("discover_lan_hosts"),
 };

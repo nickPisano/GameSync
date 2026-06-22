@@ -38,6 +38,8 @@ pub use engine::{
 };
 pub use error::{Error, Result};
 pub use model::{FileEntry, Game, Head, Platform, Snapshot, SnapshotKind};
-pub use remote::{FolderRemote, LanRemote, LanServerHandle, RcloneRemote, Remote};
+pub use remote::{
+    BeaconHandle, DiscoveredHost, FolderRemote, LanRemote, LanServerHandle, RcloneRemote, Remote,
+};
 pub use restore::RestoreOptions;
 pub use retention::{GcReport, RetentionPolicy};
