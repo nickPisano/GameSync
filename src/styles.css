@@ -326,6 +326,13 @@ input[type="radio"] {
   flex-direction: column;
   gap: 13px;
 }
+/* While the list is actively scrolling, ignore pointer/hover on the cards so
+   hover lifts and shadow transitions don't fire (and jank) as cards slide
+   under a stationary cursor. Hover is restored ~150ms after scrolling stops,
+   so deliberate hovering still gets the full effect. */
+.games.is-scrolling > * {
+  pointer-events: none;
+}
 .empty {
   text-align: center;
   margin-top: 13vh;

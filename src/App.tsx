@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, pickFolder } from "./api";
 import type { AppStatus, AutoSyncReport, Game, GameView, SyncOutcome } from "./types";
@@ -51,6 +51,20 @@ export function App() {
   const notify = useCallback((msg: string, kind: "ok" | "err" = "ok") => {
     setToast({ msg, kind });
     window.setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  // Suppress card hover while the library is scrolling: as cards slide under a
+  // stationary cursor, their :hover lifts/shadow transitions would otherwise
+  // churn the whole list and stutter. We add `is-scrolling` (which disables
+  // pointer events on the cards) on scroll and clear it ~150ms after it stops.
+  const gamesRef = useRef<HTMLElement | null>(null);
+  const scrollIdle = useRef<number | undefined>(undefined);
+  const onGamesScroll = useCallback(() => {
+    const el = gamesRef.current;
+    if (!el) return;
+    el.classList.add("is-scrolling");
+    window.clearTimeout(scrollIdle.current);
+    scrollIdle.current = window.setTimeout(() => el.classList.remove("is-scrolling"), 150);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -377,7 +391,7 @@ export function App() {
         </div>
       )}
 
-      <main className="games">
+      <main className="games" ref={gamesRef} onScroll={onGamesScroll}>
         {games.length === 0 ? (
           <div className="empty">
             <p>No games tracked yet.</p>
