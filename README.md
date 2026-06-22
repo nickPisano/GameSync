@@ -233,6 +233,11 @@ emulators). To recognize thousands more — **right inside the app, no reinstall
 GameSync syncs by replicating snapshots to a **shared folder** that each device
 can reach. (Conflict resolution needs no server — it's peer-to-peer.)
 
+> **Using Google Drive or OneDrive?** See the in-depth, step-by-step
+> **[Cloud sync guide](docs/CLOUD-SYNC.md)** — per-provider setup (desktop client
+> *and* rclone), the placeholder/offline-files gotcha, encrypted-sync notes, and
+> troubleshooting.
+
 ### Set up a shared-folder remote
 
 1. In the **Remote** bar, click **Browse…** and pick a folder inside a service
