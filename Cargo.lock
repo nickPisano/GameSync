@@ -1119,6 +1119,7 @@ dependencies = [
  "directories",
  "getrandom 0.2.17",
  "globset",
+ "lzma-sys",
  "rusqlite",
  "serde",
  "serde_json",
