@@ -87,6 +87,11 @@ body,
 #root {
   height: 100%;
   margin: 0;
+  /* The document itself must never scroll — only `.games` does. This is a hard
+     guarantee (independent of the .app flex containment, which can slip during
+     first paint / window resize and let the whole shell scroll, dragging the
+     topbar and status bar out of view with dead space below). */
+  overflow: hidden;
 }
 
 body {
@@ -213,7 +218,10 @@ input[type="radio"] {
 .app {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* Lock to the viewport directly (dvh) rather than the height:100% ancestor
+     chain, which can momentarily mis-resolve and let the shell overflow. */
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 .topbar {
