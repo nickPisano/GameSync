@@ -394,6 +394,75 @@ fn sync_two_devices_push_pull_and_conflict() {
 }
 
 #[test]
+fn fork_conflict_keeps_both_save_lines() {
+    let tmp = tempfile::tempdir().unwrap();
+    let remote = tmp.path().join("remote");
+    let a_save = tmp.path().join("A/save");
+    let b_save = tmp.path().join("B/save");
+    fs::create_dir_all(&a_save).unwrap();
+    fs::create_dir_all(&b_save).unwrap();
+
+    let a = Engine::open(tmp.path().join("A/data")).unwrap();
+    let b = Engine::open(tmp.path().join("B/data")).unwrap();
+    a.set_remote(&remote).unwrap();
+    b.set_remote(&remote).unwrap();
+
+    // Shared base: A pushes v1, B pulls it.
+    write(&a_save.join("save.dat"), "base");
+    let ga = a.add_manual_game("Shared RPG", a_save.clone()).unwrap();
+    a.backup(&ga.id, BackupOptions::default()).unwrap();
+    a.sync_game(&ga.id).unwrap();
+    let gb = b.add_manual_game("Shared RPG", b_save.clone()).unwrap();
+    b.sync_game(&gb.id).unwrap();
+
+    // Both diverge offline; A pushes first so B hits a true conflict.
+    write(&a_save.join("save.dat"), "A-offline");
+    a.backup(&ga.id, BackupOptions::default()).unwrap();
+    write(&b_save.join("save.dat"), "B-offline");
+    b.backup(&gb.id, BackupOptions::default()).unwrap();
+    a.sync_game(&ga.id).unwrap();
+    assert!(matches!(
+        b.sync_game(&gb.id).unwrap(),
+        SyncOutcome::Conflict { .. }
+    ));
+
+    // B keeps BOTH: live save stays B's, the remote branch becomes a fork game.
+    let fork = b.fork_conflict(&gb.id).unwrap();
+    assert_eq!(
+        read(&b_save.join("save.dat")),
+        "B-offline",
+        "live save = local"
+    );
+    assert_eq!(fork.name, "Shared RPG (fork)");
+    assert!(
+        !fork.sync_enabled,
+        "the fork is a local-only preserved branch"
+    );
+    assert_ne!(fork.id, gb.id);
+    assert_ne!(fork.save_root, gb.save_root);
+    assert_eq!(
+        read(&fork.save_root.join("save.dat")),
+        "A-offline",
+        "the fork preserves the remote branch's save",
+    );
+
+    // The fork is listed as its own game, with history.
+    let games = b.list_games().unwrap();
+    assert!(games.iter().any(|g| g.id == fork.id));
+    assert_eq!(b.versions(&fork.id).unwrap().len(), 1);
+
+    // The main line converges: A fast-forwards onto B's resolved (kept-local) side.
+    assert!(matches!(
+        a.sync_game(&ga.id).unwrap(),
+        SyncOutcome::Pulled { .. }
+    ));
+    assert_eq!(read(&a_save.join("save.dat")), "B-offline");
+    assert_eq!(b.sync_game(&gb.id).unwrap(), SyncOutcome::InSync);
+    assert!(a.verify().unwrap().ok());
+    assert!(b.verify().unwrap().ok());
+}
+
+#[test]
 fn backup_if_changed_skips_identical_state() {
     let (_tmp, engine, save) = setup();
     write(&save.join("s.dat"), "same");

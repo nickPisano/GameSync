@@ -81,6 +81,7 @@ export const api = {
   syncGame: (id: string) => invoke<SyncOutcome>("sync_game", { id }),
   resolveConflict: (id: string, keep: "local" | "remote") =>
     invoke<SyncOutcome>("resolve_conflict", { id, keep }),
+  forkConflict: (id: string) => invoke<Game>("fork_conflict", { id }),
 
   syncAll: () => invoke<AutoSyncReport>("sync_all"),
   getAutoSync: () => invoke<AutoSyncSettings>("get_auto_sync"),

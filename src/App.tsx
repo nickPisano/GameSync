@@ -273,6 +273,19 @@ export function App() {
     });
   }
 
+  // Keep both: live save stays, the remote branch is forked into a new game.
+  async function onForkConflict() {
+    if (!conflict) return;
+    const c = conflict;
+    setConflict(null);
+    setPreviewOpen(false);
+    await withBusy(c.gameId, async () => {
+      const fork = await api.forkConflict(c.gameId);
+      notify(`${c.gameName}: kept both — the other save is now "${fork.name}".`);
+      await refresh();
+    });
+  }
+
   async function onSaveRemote() {
     await withBusy("__remote", async () => {
       await api.setRemote(remoteInput.trim());
@@ -446,6 +459,12 @@ export function App() {
             )}
             <button onClick={() => onResolve("local")}>Keep mine</button>
             <button onClick={() => onResolve("remote")}>Take remote</button>
+            <button
+              onClick={onForkConflict}
+              title="Keep your save and save the other device's as a separate game"
+            >
+              Keep both
+            </button>
             <button className="secondary" onClick={() => setConflict(null)}>
               Later
             </button>

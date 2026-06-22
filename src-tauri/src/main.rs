@@ -443,6 +443,13 @@ fn resolve_conflict(
     state.with_engine(|e| e.resolve_conflict(&id, choice))
 }
 
+/// Resolve a conflict by keeping both sides: the live save stays, and the
+/// remote branch is preserved as a new fork game. Returns the fork.
+#[tauri::command]
+fn fork_conflict(id: String, state: State<AppState>) -> Result<Game, String> {
+    state.with_engine(|e| e.fork_conflict(&id))
+}
+
 #[tauri::command]
 fn get_auto_sync(state: State<AppState>) -> Result<AutoSyncSettings, String> {
     state.with_engine(|e| e.auto_sync_settings())
@@ -748,6 +755,7 @@ fn main() {
             set_remote,
             sync_game,
             resolve_conflict,
+            fork_conflict,
             get_auto_sync,
             set_auto_sync,
             sync_all,

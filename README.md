@@ -302,10 +302,13 @@ shows a **conflict banner** and **never overwrites your live save**:
 
 1. Click **Preview changes** to see which files differ between your save and the
    other device's.
-2. Choose **Keep mine** (your version wins) or **Take remote** (the other
-   device's version wins — your current save is backed up first).
+2. Choose **Keep mine** (your version wins), **Take remote** (the other device's
+   version wins — your current save is backed up first), or **Keep both** — your
+   save stays live and the other device's save is preserved as a **new game**
+   (named "… (fork)", in its own folder) you can play independently.
 3. Both versions stay in history, and the resolution supersedes both branches so
-   the other device converges on its next sync.
+   the other device converges on its next sync. *(CLI: `gamesync resolve
+   <game_id> --keep <local|remote|both>`.)*
 
 ---
 

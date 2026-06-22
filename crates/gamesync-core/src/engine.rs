@@ -13,7 +13,7 @@ use crate::detection::emulators::EmulatorRule;
 use crate::detection::manifest::SaveRule;
 use crate::detection::{emulators, epic, gog, ludusavi, manifest, standalone, steam};
 use crate::error::{Error, Result};
-use crate::model::{Game, Head, Platform, Snapshot, SnapshotKind};
+use crate::model::{Game, Head, Platform, Snapshot, SnapshotKind, VectorClock};
 use crate::plugins;
 use crate::remote::{lan, FolderRemote, LanRemote, LanServerHandle, RcloneRemote, Remote};
 use crate::restore::{restore_version, RestoreOptions};
@@ -1359,6 +1359,95 @@ impl Engine {
         })
     }
 
+    /// Resolve a conflict by **keeping both** save lines. The local save stays
+    /// live and the conflict converges as keep-local (so every device agrees on
+    /// the main line), while the remote branch is preserved as a brand-new,
+    /// independent **fork** game — its own folder, its own history, sync off —
+    /// so the other device's progress isn't discarded. Returns the fork game.
+    pub fn fork_conflict(&self, game_id: &str) -> Result<Game> {
+        let game = self.db.get_game(game_id)?;
+        let remote = self.remote()?;
+        let _lease = remote.lock(game_id)?;
+
+        let rh = remote
+            .get_head(game_id)?
+            .ok_or_else(|| Error::other("no remote head; nothing to fork"))?;
+        let lh = self
+            .head_snapshot(game_id)?
+            .ok_or_else(|| Error::other("no local head; nothing to fork"))?;
+        let rsnap = self.fetch_remote_version(remote.as_ref(), game_id, &rh.version_id)?;
+
+        // 1. Create the fork game with its own folder, so materializing the
+        //    remote branch never touches the original's live save.
+        let fork = self.create_fork_game(&game, &rsnap)?;
+
+        // 2. Seed the fork's history with a fork-owned copy of the remote
+        //    snapshot (same CAS objects, new id + game_id), then materialize it
+        //    into the fork's (empty) folder.
+        let fork_version = Snapshot {
+            version_id: crate::util::new_id(),
+            game_id: fork.id.clone(),
+            device_id: self.device_id.clone(),
+            created_ms: crate::util::now_ms(),
+            label: Some(format!("forked from \"{}\" on conflict", game.name)),
+            kind: SnapshotKind::Manual,
+            parent: None,
+            vclock: VectorClock::new(),
+            total_size: rsnap.total_size,
+            files: rsnap.files.clone(),
+        };
+        self.db.insert_version(&fork_version)?;
+        self.db.set_head(&fork.id, &fork_version.version_id)?;
+        restore_version(
+            &self.db,
+            &self.cas,
+            &self.device_id,
+            &fork,
+            &fork_version.version_id,
+            RestoreOptions {
+                safety_snapshot: false,
+            },
+        )?;
+
+        // 3. Converge the original game on the local side (keep-local), so all
+        //    devices agree on the main line.
+        let merged = vclock::merge(&lh.vclock, &rsnap.vclock);
+        let resolved = create_snapshot(
+            &self.db,
+            &self.cas,
+            &self.device_id,
+            &game,
+            SnapshotKind::Manual,
+            Some("conflict resolution (kept both)".to_string()),
+            &merged,
+            Some(lh.version_id.clone()),
+        )?;
+        self.db.set_head(&game.id, &resolved.version_id)?;
+        self.push_version(remote.as_ref(), game_id, &resolved)?;
+
+        Ok(fork)
+    }
+
+    /// Build + persist a fork game beside the original: a unique sibling folder
+    /// (`<save_root> (fork)`), name `<name> (fork)`, sync disabled.
+    fn create_fork_game(&self, game: &Game, rsnap: &Snapshot) -> Result<Game> {
+        let save_root = unique_fork_dir(fork_save_root(&game.save_root));
+        std::fs::create_dir_all(&save_root)?;
+        let short = &rsnap.version_id[..rsnap.version_id.len().min(6)];
+        let fork = Game {
+            id: format!("{}::fork::{short}", game.id),
+            name: format!("{} (fork)", game.name),
+            platform: Platform::Manual,
+            save_root,
+            install_dir: None,
+            includes: game.includes.clone(),
+            excludes: game.excludes.clone(),
+            sync_enabled: false,
+        };
+        self.db.upsert_game(&fork)?;
+        Ok(fork)
+    }
+
     /// Upload a version's objects + manifest and advance the remote head.
     fn push_version(&self, remote: &dyn Remote, game_id: &str, snap: &Snapshot) -> Result<()> {
         for f in &snap.files {
@@ -1448,4 +1537,37 @@ fn default_includes() -> Vec<String> {
 
 fn default_excludes() -> Vec<String> {
     DEFAULT_EXCLUDES.iter().map(|s| s.to_string()).collect()
+}
+
+/// A sibling folder for a forked save line: `<dir> (fork)` next to `dir`.
+fn fork_save_root(save_root: &Path) -> PathBuf {
+    let name = save_root
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "save".to_string());
+    let parent = save_root.parent().unwrap_or_else(|| Path::new("."));
+    parent.join(format!("{name} (fork)"))
+}
+
+/// Ensure the fork folder doesn't collide with an existing one, appending a
+/// number (`… (fork) 2`, `3`, …) until a free path is found.
+fn unique_fork_dir(base: PathBuf) -> PathBuf {
+    if !base.exists() {
+        return base;
+    }
+    let name = base
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "save (fork)".to_string());
+    let parent = base
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+    for n in 2..1000 {
+        let cand = parent.join(format!("{name} {n}"));
+        if !cand.exists() {
+            return cand;
+        }
+    }
+    base
 }

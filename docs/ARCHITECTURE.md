@@ -113,8 +113,10 @@ the UI's **diff preview** (`diff(local, remote)`) works offline before the user
 resolves. A LAN host also **advertises itself** (`lan::announce` UDP-broadcasts
 a name + TCP port beacon; `lan::discover` listens), so peers find it via **Find
 hosts** / `discover-lan` instead of typing an address — the pairing token is
-never broadcast and is still supplied to connect. Still to come: "keep both as a
-fork".
+never broadcast and is still supplied to connect. Beyond keep-mine / take-remote,
+`fork_conflict` **keeps both**: the live save converges as keep-local while the
+remote branch is preserved as a new, independent fork game (its own folder +
+history, sync off), so neither device's progress is discarded.
 
 ## Roadmap
 
@@ -133,12 +135,12 @@ fork".
   ✅ emulator detection, ✅ **GOG (Galaxy) + Epic detection** (name-matched into
   the manifest), ✅ retention/GC, ✅ version diff. Remaining: signed auto-update,
   Linux/macOS packaging, signed manifest auto-update — all need the app shell.
-- **Phase 3 (mostly done):** ✅ version-vector conflict model + resolution,
+- **Phase 3 (done):** ✅ version-vector conflict model + resolution,
   ✅ rclone provider support (`RcloneRemote`), ✅ LAN peer-to-peer transport
   (`LanRemote` + `lan::serve`, host UI in Settings), ✅ conflict **diff preview**
   before resolving, ✅ **LAN host auto-discovery** (UDP-broadcast beacon —
-  `announce`/`discover`, **Find hosts** in the UI + `discover-lan` CLI).
-  Remaining: "keep both as a fork".
+  `announce`/`discover`, **Find hosts** in the UI + `discover-lan` CLI),
+  ✅ **"keep both as a fork"** (`fork_conflict`). Phase 3 is feature-complete.
 - **Phase 4 (partly done):** ✅ **fault-injection tests** (a corrupt, missing, or
   tampered CAS object aborts restore at the verify gate without touching the live
   save, leaves no temp dirs, keeps the pre-restore safety snapshot recoverable,

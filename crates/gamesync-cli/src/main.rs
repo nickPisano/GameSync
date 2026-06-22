@@ -376,12 +376,27 @@ fn cmd_sync(args: &[String]) -> Result<(), String> {
 fn cmd_resolve(args: &[String]) -> Result<(), String> {
     let id = args
         .first()
-        .ok_or("usage: gamesync resolve <game_id> --keep <local|remote>")?;
-    let keep = flag_value(args, "--keep").ok_or("specify --keep local|remote")?;
+        .ok_or("usage: gamesync resolve <game_id> --keep <local|remote|both>")?;
+    let keep = flag_value(args, "--keep").ok_or("specify --keep local|remote|both")?;
+    // `both` forks the remote branch into a new game instead of discarding it.
+    if keep == "both" {
+        let fork = engine()?.fork_conflict(id).map_err(|e| e.to_string())?;
+        println!("Kept both — your save stays live; the remote branch is preserved as");
+        println!(
+            "a new game \"{}\" at {}.",
+            fork.name,
+            fork.save_root.display()
+        );
+        return Ok(());
+    }
     let choice = match keep.as_str() {
         "local" => ConflictChoice::KeepLocal,
         "remote" => ConflictChoice::KeepRemote,
-        other => return Err(format!("--keep must be 'local' or 'remote', got '{other}'")),
+        other => {
+            return Err(format!(
+                "--keep must be 'local', 'remote', or 'both', got '{other}'"
+            ))
+        }
     };
     engine()?
         .resolve_conflict(id, choice)
@@ -544,8 +559,9 @@ COMMANDS:
     remote set <folder>          Set the sync target (e.g. a Dropbox/Drive folder)
     remote status                Show the configured remote
     sync <game_id>               Sync a game with the remote (push/pull/conflict)
-    resolve <game_id> --keep <local|remote>
-                                 Resolve a sync conflict by choosing a side
+    resolve <game_id> --keep <local|remote|both>
+                                 Resolve a sync conflict (both = keep your save
+                                 live and fork the remote branch into a new game)
     serve-lan [--port N] [--token T] [--dir D]
                                  Host this device's saves over the LAN for peers
     discover-lan [--seconds N]   Find LAN hosts advertising on this network
