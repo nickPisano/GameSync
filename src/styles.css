@@ -107,6 +107,38 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* ---- scrollbars ----------------------------------------------------------- */
+/* A slim, theme-tinted scrollbar in place of the chunky native one (most
+   visible on Windows/WebView2, which otherwise shows the classic grey bar).
+   Standard props drive Chromium/WebView2; the -webkit pseudo-elements drive
+   WebKit on macOS. Both follow the theme via the CSS variables. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text) 26%, transparent) transparent;
+}
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  /* 3px transparent border + padding-box clip = a slim floating pill with a
+     gap from the edge, instead of a flush slab. */
+  background: color-mix(in srgb, var(--text) 24%, transparent);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent) 55%, var(--text) 28%);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* ---- buttons ------------------------------------------------------------- */
 /* Primary = filled accent (reserved for the main action in a context).       */
 button {
