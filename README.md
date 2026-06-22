@@ -159,7 +159,7 @@ For anything not auto-detected:
 
 ### Recognize more games (Update game list)
 
-GameSync ships with a [curated starter list](docs/GAMES.md) (~70 games + 10
+GameSync ships with a [curated starter list](docs/GAMES.md) (~70 games + 11
 emulators). To recognize thousands more — **right inside the app, no reinstall**:
 
 1. Open **Settings → Game detection**.

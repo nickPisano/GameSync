@@ -1,7 +1,7 @@
 # Games detected on install
 
 GameSync ships with a small **curated save-path manifest** baked into the app.
-The moment you click **Scan**, it recognizes these **72 games** and **10
+The moment you click **Scan**, it recognizes these **72 games** and **11
 emulators** automatically — locating their save folders (and matching the same
 games across Steam, GOG, and Epic) and adding them to your library with zero
 setup.
