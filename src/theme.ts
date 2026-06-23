@@ -40,6 +40,26 @@ export const BUILTIN = [
   { id: "grape", name: "Grape", accent: "#b57bff", bg: "#15121d" },
 ] as const;
 
+/** Optional surface treatment a theme can request. Gated entirely behind the
+ *  `[data-style]` attribute in CSS, so a theme without effects looks unchanged. */
+export interface Effects {
+  style: "glass" | "neo" | "skeuo";
+  /** 2–4 `#rrggbb` stops, top→bottom (glass backdrop / skeuo surface). */
+  gradient?: string[];
+  /** px, 0–40 — glass frost radius / neo shadow softness. */
+  blur?: number;
+  /** 0–1 — glass panel translucency. */
+  opacity?: number;
+  /** Light edge: glass rim / neo top-left glow / skeuo gloss. */
+  highlight?: string;
+  /** Dark edge: drop shadow / neo bottom-right / skeuo base. */
+  shadow?: string;
+  /** Optional accent glow on the primary button. */
+  glow?: string;
+}
+
+export const FX_STYLES = ["glass", "neo", "skeuo"] as const;
+
 export interface CustomTheme {
   id: string;
   name: string;
@@ -47,6 +67,8 @@ export interface CustomTheme {
   /** Optional self-supplied preview: any CSS background value (gradient, solid
    *  color, or a `data:` image URL). Falls back to a generated bg+accent swatch. */
   swatch?: string;
+  /** Optional glass/neo/skeuo surface treatment. */
+  effects?: Effects;
 }
 
 const PREF_KEY = "gamesync-theme";
@@ -74,14 +96,50 @@ function prefersDark(): boolean {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true;
 }
 
+// CSS custom properties driven by a theme's `effects` block.
+const FX_VARS = [
+  "--fx-gradient",
+  "--fx-blur",
+  "--fx-opacity",
+  "--fx-highlight",
+  "--fx-shadow",
+  "--fx-glow",
+] as const;
+
+/** Remove every trace of a previous effect (the `data-style` attribute and all
+ *  `--fx-*` vars), so switching to a built-in or effect-less theme fully clears it. */
+function clearEffects() {
+  document.documentElement.removeAttribute("data-style");
+  FX_VARS.forEach((v) => document.documentElement.style.removeProperty(v));
+}
+
+/** Apply a theme's effects (or clear them when none). Only sets the `--fx-*`
+ *  vars actually provided; CSS supplies fallbacks for the rest. */
+function applyEffects(effects?: Effects) {
+  clearEffects();
+  if (!effects) return;
+  const root = document.documentElement;
+  root.setAttribute("data-style", effects.style);
+  if (effects.gradient && effects.gradient.length) {
+    root.style.setProperty("--fx-gradient", `linear-gradient(180deg, ${effects.gradient.join(", ")})`);
+  }
+  if (typeof effects.blur === "number") root.style.setProperty("--fx-blur", `${effects.blur}px`);
+  if (typeof effects.opacity === "number") root.style.setProperty("--fx-opacity", String(effects.opacity));
+  if (effects.highlight) root.style.setProperty("--fx-highlight", effects.highlight);
+  if (effects.shadow) root.style.setProperty("--fx-shadow", effects.shadow);
+  if (effects.glow) root.style.setProperty("--fx-glow", effects.glow);
+}
+
 function applyBuiltin(id: string) {
   COLOR_KEYS.forEach((k) => document.documentElement.style.removeProperty(`--${k}`));
   document.documentElement.setAttribute("data-theme", id);
+  clearEffects(); // built-ins never carry effects
 }
 
-function applyCustom(colors: Palette) {
+function applyCustom(colors: Palette, effects?: Effects) {
   document.documentElement.removeAttribute("data-theme"); // base = :root (Midnight)
   COLOR_KEYS.forEach((k) => document.documentElement.style.setProperty(`--${k}`, colors[k]));
+  applyEffects(effects);
 }
 
 /** Apply a preference and persist it. */
@@ -92,7 +150,7 @@ export function applyTheme(pref: string) {
   } else if (pref.startsWith("custom:")) {
     const id = pref.slice("custom:".length);
     const found = loadCustomThemes().find((t) => t.id === id);
-    if (found) applyCustom(found.colors);
+    if (found) applyCustom(found.colors, found.effects);
     else applyBuiltin("midnight");
   } else {
     applyBuiltin(pref);
@@ -124,6 +182,33 @@ function isSafeSwatch(s: string): boolean {
   if (s.length > MAX_SWATCH_LEN) return false;
   const urls = s.match(/url\([^)]*\)/gi) ?? [];
   return urls.every((u) => /^url\(\s*['"]?data:/i.test(u));
+}
+
+function isHex6(v: unknown): v is string {
+  return typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v.trim());
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, n));
+}
+
+/** Defensively parse an `effects` block. Returns `undefined` (block ignored)
+ *  unless `style` is valid; individual malformed fields are dropped, not fatal. */
+function parseEffects(raw: unknown): Effects | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const e = raw as Record<string, unknown>;
+  if (!FX_STYLES.includes(e.style as (typeof FX_STYLES)[number])) return undefined;
+  const out: Effects = { style: e.style as Effects["style"] };
+  if (Array.isArray(e.gradient)) {
+    const stops = e.gradient.filter(isHex6).map((s) => s.trim());
+    if (stops.length >= 2 && stops.length <= 4) out.gradient = stops;
+  }
+  if (typeof e.blur === "number" && Number.isFinite(e.blur)) out.blur = clamp(e.blur, 0, 40);
+  if (typeof e.opacity === "number" && Number.isFinite(e.opacity)) out.opacity = clamp(e.opacity, 0, 1);
+  if (isHex6(e.highlight)) out.highlight = e.highlight.trim();
+  if (isHex6(e.shadow)) out.shadow = e.shadow.trim();
+  if (isHex6(e.glow)) out.glow = e.glow.trim();
+  return out;
 }
 
 /** Parse + validate an imported theme JSON, store it, and return it. Throws an
@@ -167,6 +252,8 @@ export function importThemeFromJson(text: string): CustomTheme {
   if (typeof swatch === "string" && swatch.trim() && isSafeSwatch(swatch.trim())) {
     theme.swatch = swatch.trim();
   }
+  const effects = parseEffects(obj.effects);
+  if (effects) theme.effects = effects;
   customs.push(theme);
   saveCustomThemes(customs);
   return theme;

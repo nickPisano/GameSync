@@ -395,6 +395,11 @@ Encrypts everything GameSync stores and uploads.
    `ok`, `err`, `warn`. Optionally add a `swatch` (any CSS background — a gradient
    or a `data:` image URL) to give your theme its own preview tile. (A filled-in
    template is pre-loaded — edit it.)
+   - *(Optional)* an `effects` block to restyle surfaces — `"style"` of
+     `"glass"` (frosted translucent panels over a gradient), `"neo"`
+     (neumorphic extruded panels), or `"skeuo"` (glossy beveled surfaces), plus
+     optional `gradient`/`blur`/`opacity`/`highlight`/`shadow`/`glow`. Themes
+     without it are unaffected.
 3. Click **Import**. It applies immediately and shows up as a tile in the gallery.
 4. To delete a custom theme, click the **×** on its tile in the gallery.
 

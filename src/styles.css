@@ -1225,3 +1225,80 @@ button .sync-spinner {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ---- theme effects (glass / neo / skeuo) --------------------------------- */
+/* Driven by a custom theme's optional `effects` block; the app sets
+   `data-style` + `--fx-*` vars on <html>. Everything below is gated behind
+   [data-style], so themes without effects (and all built-ins) are unchanged.
+   Primary button = `button:not(.secondary)`; hover variants are included so the
+   base button:hover rules don't revert the treatment. */
+
+/* glass — frosted translucent panels over a gradient backdrop */
+[data-style="glass"] body {
+  background: var(--fx-gradient, var(--bg)) fixed;
+}
+[data-style="glass"] .card,
+[data-style="glass"] .modal {
+  background: color-mix(in srgb, var(--panel) calc(var(--fx-opacity, 0.6) * 100%), transparent);
+  backdrop-filter: blur(var(--fx-blur, 10px));
+  -webkit-backdrop-filter: blur(var(--fx-blur, 10px));
+  border: 1px solid color-mix(in srgb, var(--fx-highlight, #fff) 55%, transparent);
+}
+[data-style="glass"] button:not(.secondary):not(.linklike):not(.link-btn),
+[data-style="glass"] button:not(.secondary):not(.linklike):not(.link-btn):hover:not(:disabled) {
+  box-shadow: 0 0 14px var(--fx-glow, var(--accent));
+}
+
+/* neo — monochrome, extruded surfaces with soft dual shadows */
+[data-style="neo"] body {
+  background: var(--bg);
+}
+[data-style="neo"] .card,
+[data-style="neo"] .modal,
+[data-style="neo"] button:not(.linklike):not(.link-btn),
+[data-style="neo"] button:not(.linklike):not(.link-btn):hover:not(:disabled) {
+  background: var(--panel);
+  color: var(--text);
+  border: none;
+  border-radius: 16px;
+  box-shadow:
+    calc(var(--fx-blur, 5px) * 1.2) calc(var(--fx-blur, 5px) * 1.2) calc(var(--fx-blur, 5px) * 2.4)
+      var(--fx-shadow, rgba(0, 0, 0, 0.3)),
+    calc(var(--fx-blur, 5px) * -1.2) calc(var(--fx-blur, 5px) * -1.2) calc(var(--fx-blur, 5px) * 2.4)
+      var(--fx-highlight, rgba(255, 255, 255, 0.7));
+}
+[data-style="neo"] button:not(.linklike):not(.link-btn):active:not(:disabled) {
+  box-shadow:
+    inset 3px 3px 6px var(--fx-shadow, rgba(0, 0, 0, 0.3)),
+    inset -3px -3px 6px var(--fx-highlight, rgba(255, 255, 255, 0.7));
+}
+
+/* skeuo — glossy gradient surfaces with a beveled, raised look */
+[data-style="skeuo"] body {
+  background: var(--fx-gradient, var(--bg));
+}
+[data-style="skeuo"] .card,
+[data-style="skeuo"] .modal {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--panel) 84%, #fff),
+    var(--panel),
+    color-mix(in srgb, var(--panel) 88%, #000)
+  );
+  border-top: 1px solid color-mix(in srgb, var(--fx-highlight, #fff) 60%, transparent);
+  box-shadow:
+    0 2px 6px var(--fx-shadow, rgba(0, 0, 0, 0.4)),
+    inset 0 1px 0 color-mix(in srgb, var(--fx-highlight, #fff) 50%, transparent);
+}
+[data-style="skeuo"] button:not(.secondary):not(.linklike):not(.link-btn),
+[data-style="skeuo"] button:not(.secondary):not(.linklike):not(.link-btn):hover:not(:disabled) {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 70%, #fff),
+    var(--accent),
+    color-mix(in srgb, var(--accent) 78%, #000)
+  );
+  box-shadow:
+    0 2px 4px var(--fx-shadow, rgba(0, 0, 0, 0.4)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
