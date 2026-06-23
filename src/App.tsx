@@ -344,6 +344,28 @@ export function App() {
 
   return (
     <div className="app">
+      {/* Decorative bubble layer; hidden unless a theme sets data-fx-bubbles. */}
+      <div className="fx-bubbles" aria-hidden="true">
+        {Array.from({ length: 16 }, (_, i) => {
+          const size = 14 + ((i * 37) % 38); // 14–51px
+          const left = (i * 61) % 100; // spread across the width
+          const dur = 15 + ((i * 7) % 16); // 15–30s rise
+          const delay = -((i * 13) % 22); // negative → already mid-flight at load
+          return (
+            <span
+              key={i}
+              className="fx-bubble"
+              style={{
+                left: `${left}%`,
+                width: `${size}px`,
+                height: `${size}px`,
+                animationDuration: `${dur}s`,
+                animationDelay: `${delay}s`,
+              }}
+            />
+          );
+        })}
+      </div>
       <header className="topbar">
         <div className="brand">
           <svg className="brand-logo" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">

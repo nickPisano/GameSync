@@ -41,9 +41,12 @@ export const BUILTIN = [
 ] as const;
 
 /** Optional surface treatment a theme can request. Gated entirely behind the
- *  `[data-style]` attribute in CSS, so a theme without effects looks unchanged. */
+ *  `[data-style]` / `[data-fx-bubbles]` attributes in CSS, so a theme without
+ *  effects looks unchanged. A block is valid if it has a known `style` and/or
+ *  `bubbles` — so bubbles can ride on a surface style or stand alone. */
 export interface Effects {
-  style: "glass" | "neo" | "skeuo";
+  /** Surface style. Optional so `bubbles` can be used without restyling panels. */
+  style?: "glass" | "neo" | "skeuo";
   /** 2–4 `#rrggbb` stops, top→bottom (glass backdrop / skeuo surface). */
   gradient?: string[];
   /** px, 0–40 — glass frost radius / neo shadow softness. */
@@ -56,6 +59,10 @@ export interface Effects {
   shadow?: string;
   /** Optional accent glow on the primary button. */
   glow?: string;
+  /** Float soft bubbles up the background (composes with any style). */
+  bubbles?: boolean;
+  /** `#rrggbb` tint for the bubbles (defaults to highlight, then accent). */
+  bubbleColor?: string;
 }
 
 export const FX_STYLES = ["glass", "neo", "skeuo"] as const;
@@ -104,12 +111,14 @@ const FX_VARS = [
   "--fx-highlight",
   "--fx-shadow",
   "--fx-glow",
+  "--fx-bubble",
 ] as const;
 
-/** Remove every trace of a previous effect (the `data-style` attribute and all
- *  `--fx-*` vars), so switching to a built-in or effect-less theme fully clears it. */
+/** Remove every trace of a previous effect (the `data-style`/`data-fx-bubbles`
+ *  attributes and all `--fx-*` vars), so switching themes fully clears it. */
 function clearEffects() {
   document.documentElement.removeAttribute("data-style");
+  document.documentElement.removeAttribute("data-fx-bubbles");
   FX_VARS.forEach((v) => document.documentElement.style.removeProperty(v));
 }
 
@@ -119,7 +128,7 @@ function applyEffects(effects?: Effects) {
   clearEffects();
   if (!effects) return;
   const root = document.documentElement;
-  root.setAttribute("data-style", effects.style);
+  if (effects.style) root.setAttribute("data-style", effects.style);
   if (effects.gradient && effects.gradient.length) {
     root.style.setProperty("--fx-gradient", `linear-gradient(180deg, ${effects.gradient.join(", ")})`);
   }
@@ -128,6 +137,8 @@ function applyEffects(effects?: Effects) {
   if (effects.highlight) root.style.setProperty("--fx-highlight", effects.highlight);
   if (effects.shadow) root.style.setProperty("--fx-shadow", effects.shadow);
   if (effects.glow) root.style.setProperty("--fx-glow", effects.glow);
+  if (effects.bubbleColor) root.style.setProperty("--fx-bubble", effects.bubbleColor);
+  if (effects.bubbles) root.setAttribute("data-fx-bubbles", "");
 }
 
 function applyBuiltin(id: string) {
@@ -193,12 +204,15 @@ function clamp(n: number, lo: number, hi: number): number {
 }
 
 /** Defensively parse an `effects` block. Returns `undefined` (block ignored)
- *  unless `style` is valid; individual malformed fields are dropped, not fatal. */
+ *  unless it requests something real — a valid `style` and/or `bubbles`;
+ *  individual malformed fields are dropped, not fatal. */
 function parseEffects(raw: unknown): Effects | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const e = raw as Record<string, unknown>;
-  if (!FX_STYLES.includes(e.style as (typeof FX_STYLES)[number])) return undefined;
-  const out: Effects = { style: e.style as Effects["style"] };
+  const out: Effects = {};
+  if (FX_STYLES.includes(e.style as (typeof FX_STYLES)[number])) {
+    out.style = e.style as Effects["style"];
+  }
   if (Array.isArray(e.gradient)) {
     const stops = e.gradient.filter(isHex6).map((s) => s.trim());
     if (stops.length >= 2 && stops.length <= 4) out.gradient = stops;
@@ -208,6 +222,10 @@ function parseEffects(raw: unknown): Effects | undefined {
   if (isHex6(e.highlight)) out.highlight = e.highlight.trim();
   if (isHex6(e.shadow)) out.shadow = e.shadow.trim();
   if (isHex6(e.glow)) out.glow = e.glow.trim();
+  if (e.bubbles === true) out.bubbles = true;
+  if (isHex6(e.bubbleColor)) out.bubbleColor = e.bubbleColor.trim();
+  // Only keep the block if it actually does something.
+  if (!out.style && !out.bubbles) return undefined;
   return out;
 }
 

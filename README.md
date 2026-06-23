@@ -398,7 +398,9 @@ Encrypts everything GameSync stores and uploads.
    - *(Optional)* an `effects` block to restyle surfaces — `"style"` of
      `"glass"` (frosted translucent panels over a gradient), `"neo"`
      (neumorphic extruded panels), or `"skeuo"` (glossy beveled surfaces), plus
-     optional `gradient`/`blur`/`opacity`/`highlight`/`shadow`/`glow`. Themes
+     optional `gradient`/`blur`/`opacity`/`highlight`/`shadow`/`glow`. Add
+     `"bubbles": true` (with an optional `"bubbleColor"`) to float soft bubbles
+     up the background — it composes with any style, or on its own. Themes
      without it are unaffected.
 3. Click **Import**. It applies immediately and shows up as a tile in the gallery.
 4. To delete a custom theme, click the **×** on its tile in the gallery.
