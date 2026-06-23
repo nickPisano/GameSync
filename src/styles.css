@@ -198,6 +198,12 @@ button.secondary:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
+/* A toggled-on secondary button (e.g. Filter while its bar is open). */
+button.secondary.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel-2));
+}
 
 input,
 select,
@@ -373,6 +379,35 @@ input[type="radio"] {
 }
 .lan-host .muted {
   font-size: 12px;
+}
+
+/* ---- library search + sort ----------------------------------------------- */
+.games-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 22px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 30%, var(--bg));
+}
+.games-search {
+  flex: 1;
+  min-width: 0;
+}
+.games-sort {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.games-sort select {
+  font-size: 13px;
+}
+.games-count {
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .conflict-banner {

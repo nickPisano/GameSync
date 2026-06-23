@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, pickFolder } from "./api";
 import type {
@@ -57,6 +57,47 @@ export function App() {
   // LAN host auto-discovery (peer side): found hosts + in-flight flag.
   const [lanHosts, setLanHosts] = useState<DiscoveredHost[] | null>(null);
   const [discovering, setDiscovering] = useState(false);
+  // Library search + sort (revealed by the Filter button).
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<"name" | "recent" | "versions" | "platform">("name");
+
+  // Toggle the filter bar; clearing the search when hiding it avoids a hidden
+  // filter silently trimming the list.
+  function toggleFilters() {
+    setFiltersOpen((open) => {
+      if (open) setQuery("");
+      return !open;
+    });
+  }
+
+  const visibleGames = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = q
+      ? games.filter(
+          (v) =>
+            v.game.name.toLowerCase().includes(q) ||
+            v.game.platform.toLowerCase().includes(q) ||
+            v.game.save_root.toLowerCase().includes(q),
+        )
+      : [...games];
+    list.sort((a, b) => {
+      switch (sortKey) {
+        case "recent":
+          return (b.last_backup_ms ?? -1) - (a.last_backup_ms ?? -1);
+        case "versions":
+          return b.version_count - a.version_count;
+        case "platform":
+          return (
+            a.game.platform.localeCompare(b.game.platform) ||
+            a.game.name.localeCompare(b.game.name)
+          );
+        default:
+          return a.game.name.localeCompare(b.game.name);
+      }
+    });
+    return list;
+  }, [games, query, sortKey]);
 
   const notify = useCallback((msg: string, kind: "ok" | "err" = "ok") => {
     setToast({ msg, kind });
@@ -404,6 +445,15 @@ export function App() {
           <button className="secondary" onClick={() => setAddOpen(true)}>
             Add game
           </button>
+          <button
+            className={`secondary ${filtersOpen ? "active" : ""}`}
+            onClick={toggleFilters}
+            disabled={games.length === 0}
+            title="Search & sort your games"
+            aria-pressed={filtersOpen}
+          >
+            Filter
+          </button>
           <button className="secondary" onClick={() => setPluginsOpen(true)}>
             Plugins
           </button>
@@ -494,6 +544,48 @@ export function App() {
         </div>
       )}
 
+      {filtersOpen && games.length > 0 && (
+        <div className="games-toolbar">
+          <input
+            className="games-search"
+            type="text"
+            autoFocus
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="Search games by name, platform, or path…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search games"
+          />
+          {query && (
+            <button
+              className="linklike games-clear"
+              onClick={() => setQuery("")}
+              title="Clear search"
+            >
+              Clear
+            </button>
+          )}
+          <label className="games-sort">
+            Sort
+            <select
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as typeof sortKey)}
+            >
+              <option value="name">Name (A–Z)</option>
+              <option value="recent">Recently backed up</option>
+              <option value="versions">Most versions</option>
+              <option value="platform">Platform</option>
+            </select>
+          </label>
+          {query && (
+            <span className="games-count muted">
+              {visibleGames.length} of {games.length}
+            </span>
+          )}
+        </div>
+      )}
+
       <main className="games" ref={gamesRef} onScroll={onGamesScroll}>
         {games.length === 0 ? (
           <div className="empty">
@@ -503,8 +595,13 @@ export function App() {
               <strong>Add game</strong> to point at a save folder.
             </p>
           </div>
+        ) : visibleGames.length === 0 ? (
+          <div className="empty">
+            <p>No games match “{query}”.</p>
+            <p className="muted">Try a different search.</p>
+          </div>
         ) : (
-          games.map((view) => (
+          visibleGames.map((view) => (
             <GameCard
               key={view.game.id}
               view={view}
