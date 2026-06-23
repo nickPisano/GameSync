@@ -7,6 +7,7 @@ import {
   removeCustomTheme,
   themeTemplate,
   type CustomTheme,
+  type Effects,
 } from "../theme";
 
 interface Props {
@@ -23,6 +24,37 @@ interface Props {
 
 function swatchStyle(bg: string, accent: string): CSSProperties {
   return { background: bg, ["--swatch-accent" as string]: accent } as CSSProperties;
+}
+
+function fxTitle(fx: Effects): string {
+  const bits = [fx.style ?? "effects", fx.bubbles ? "bubbles" : ""].filter(Boolean);
+  return `Effects: ${bits.join(" · ")}`;
+}
+
+/** A custom theme's preview swatch. Themes with `effects` get a glow (the
+ *  "has effects" cue); themes with `bubbles` also get tiny rising bubbles. */
+function CustomSwatch({ t }: { t: CustomTheme }) {
+  const fx = t.effects;
+  const style: Record<string, string> = t.swatch
+    ? { background: t.swatch }
+    : { background: t.colors.bg, "--swatch-accent": t.colors.accent };
+  if (fx) style["--swatch-glow"] = fx.glow ?? fx.highlight ?? t.colors.accent;
+  if (fx?.bubbles) style["--swatch-bubble"] = fx.bubbleColor ?? fx.highlight ?? t.colors.accent;
+  return (
+    <span
+      className={`theme-swatch ${t.swatch ? "theme-swatch-custom" : ""} ${fx ? "fx-glow" : ""}`}
+      style={style as CSSProperties}
+      title={fx ? fxTitle(fx) : undefined}
+    >
+      {fx?.bubbles && (
+        <span className="swatch-bubbles" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+      )}
+    </span>
+  );
 }
 
 /** A gallery of every theme — built-ins, Auto, and custom imports — each shown
@@ -92,11 +124,7 @@ export function ThemeModal({ pref, customs, onChoose, onCustomsChanged, notify, 
             >
               ×
             </span>
-            {t.swatch ? (
-              <span className="theme-swatch theme-swatch-custom" style={{ background: t.swatch }} />
-            ) : (
-              <span className="theme-swatch" style={swatchStyle(t.colors.bg, t.colors.accent)} />
-            )}
+            <CustomSwatch t={t} />
             {t.name}
           </button>
         ))}

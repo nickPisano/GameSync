@@ -1031,6 +1031,77 @@ button .sync-spinner {
   background: var(--swatch-accent);
 }
 
+/* A theme that carries `effects` gets a glow on its swatch (the "has effects"
+   cue); box-shadow renders outside the swatch's overflow clip, so it shows. */
+.theme-swatch.fx-glow {
+  border-color: color-mix(in srgb, var(--swatch-glow, var(--accent)) 60%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--swatch-glow, var(--accent)) 50%, transparent),
+    0 0 9px 0 var(--swatch-glow, var(--accent));
+}
+/* Tiny rising bubbles inside the swatch for themes with `effects.bubbles`
+   (clipped by the swatch's overflow:hidden). */
+.swatch-bubbles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.swatch-bubbles i {
+  position: absolute;
+  bottom: -6px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--swatch-bubble, var(--accent)) 90%, transparent),
+    transparent 70%
+  );
+  animation: swatch-rise linear infinite;
+}
+.swatch-bubbles i:nth-child(1) {
+  left: 18%;
+  width: 7px;
+  height: 7px;
+  animation-duration: 3.2s;
+}
+.swatch-bubbles i:nth-child(2) {
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  animation-duration: 2.6s;
+  animation-delay: -1.1s;
+}
+.swatch-bubbles i:nth-child(3) {
+  left: 75%;
+  width: 9px;
+  height: 9px;
+  animation-duration: 3.8s;
+  animation-delay: -0.6s;
+}
+@keyframes swatch-rise {
+  0% {
+    transform: translateY(0) scale(0.6);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.9;
+  }
+  80% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-34px) scale(1);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .swatch-bubbles i {
+    animation: none;
+    opacity: 0.85;
+    bottom: auto;
+    top: 30%;
+  }
+}
+
 /* ---- settings ------------------------------------------------------------ */
 .settings-h {
   font-size: 12px;
