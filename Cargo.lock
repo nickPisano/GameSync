@@ -1091,7 +1091,7 @@ dependencies = [
 
 [[package]]
 name = "gamesync-app"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "gamesync-core",
  "serde",
@@ -1104,7 +1104,7 @@ dependencies = [
 
 [[package]]
 name = "gamesync-cli"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "gamesync-core",
  "serde_json",
@@ -1112,7 +1112,7 @@ dependencies = [
 
 [[package]]
 name = "gamesync-core"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "argon2",
  "blake3",
