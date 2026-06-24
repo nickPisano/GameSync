@@ -60,7 +60,7 @@ export function App() {
   // Library search + sort (revealed by the Filter button).
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [sortKey, setSortKey] = useState<"name" | "recent" | "versions" | "platform">("name");
+  const [sortKey, setSortKey] = useState<"name" | "recent" | "versions" | "platform">("recent");
 
   // Toggle the filter bar; clearing the search when hiding it avoids a hidden
   // filter silently trimming the list.
