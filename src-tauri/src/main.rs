@@ -485,7 +485,12 @@ fn set_titlebar(window: tauri::WebviewWindow, bg: String, text: String, dark: bo
         };
         if let Ok(hwnd) = window.hwnd() {
             let handle: HWND = hwnd.0 as _;
-            for (attr, hex) in [(DWMWA_CAPTION_COLOR, &bg), (DWMWA_TEXT_COLOR, &text)] {
+            // windows-sys types the DWMWA_* consts as i32 but the attribute
+            // parameter as u32, so cast.
+            for (attr, hex) in [
+                (DWMWA_CAPTION_COLOR as u32, &bg),
+                (DWMWA_TEXT_COLOR as u32, &text),
+            ] {
                 if let Some(c) = hex_colorref(hex) {
                     unsafe {
                         let _ = DwmSetWindowAttribute(
