@@ -18,3 +18,8 @@ tauri-plugin-dialog = "2"
 serde.workspace = true
 serde_json.workspace = true
 gamesync-core = { path = "../crates/gamesync-core" }
+
+# Windows-only: recolor the native title bar (caption) to match the theme via
+# the DWM API (Windows 11 22000+). Other platforms use Tauri's set_theme only.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }

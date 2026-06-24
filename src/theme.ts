@@ -3,6 +3,8 @@
 // palettes live in styles.css under [data-theme]; custom palettes are applied as
 // inline CSS variables on :root. Everything persists in localStorage.
 
+import { invoke } from "@tauri-apps/api/core";
+
 export const COLOR_KEYS = [
   "bg",
   "panel",
@@ -153,6 +155,28 @@ function applyCustom(colors: Palette, effects?: Effects) {
   applyEffects(effects);
 }
 
+/** Rough perceived-luminance test on a `#rrggbb` color. */
+function isDarkColor(hex: string): boolean {
+  const h = hex.replace("#", "").trim();
+  if (h.length < 6) return true;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return 0.299 * r + 0.587 * g + 0.114 * b < 140;
+}
+
+/** Recolor the native window title bar to match the active theme (Tauri command;
+ *  no-op outside the app). Reads the resolved CSS vars so it works for built-ins
+ *  and custom themes alike. */
+function syncTitlebar() {
+  const cs = getComputedStyle(document.documentElement);
+  const bg = cs.getPropertyValue("--panel").trim();
+  const text = cs.getPropertyValue("--text").trim();
+  const base = cs.getPropertyValue("--bg").trim() || bg;
+  if (!bg) return;
+  invoke("set_titlebar", { bg, text, dark: isDarkColor(base) }).catch(() => {});
+}
+
 /** Apply a preference and persist it. */
 export function applyTheme(pref: string) {
   localStorage.setItem(PREF_KEY, pref);
@@ -166,6 +190,7 @@ export function applyTheme(pref: string) {
   } else {
     applyBuiltin(pref);
   }
+  syncTitlebar();
 }
 
 /** Apply the saved preference and keep "auto" in sync with the OS. */

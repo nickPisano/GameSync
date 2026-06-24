@@ -450,6 +450,57 @@ fn fork_conflict(id: String, state: State<AppState>) -> Result<Game, String> {
     state.with_engine(|e| e.fork_conflict(&id))
 }
 
+/// Parse `#rrggbb` into a Win32 COLORREF (`0x00bbggrr`).
+#[cfg(windows)]
+fn hex_colorref(hex: &str) -> Option<u32> {
+    let h = hex.trim().trim_start_matches('#');
+    if h.len() != 6 {
+        return None;
+    }
+    let r = u32::from_str_radix(&h[0..2], 16).ok()?;
+    let g = u32::from_str_radix(&h[2..4], 16).ok()?;
+    let b = u32::from_str_radix(&h[4..6], 16).ok()?;
+    Some(r | (g << 8) | (b << 16))
+}
+
+/// Theme the window title bar to match the app theme. `set_theme` (all
+/// platforms) flips the light/dark chrome so the caption glyphs stay legible;
+/// on Windows 11 we additionally recolor the caption + title text via DWM so it
+/// blends with the topbar. Called from the frontend whenever the theme changes.
+#[tauri::command]
+fn set_titlebar(window: tauri::WebviewWindow, bg: String, text: String, dark: bool) {
+    let _ = window.set_theme(Some(if dark {
+        tauri::Theme::Dark
+    } else {
+        tauri::Theme::Light
+    }));
+    // bg/text only drive the Windows caption color below.
+    #[cfg(not(windows))]
+    let _ = (&bg, &text);
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::HWND;
+        use windows_sys::Win32::Graphics::Dwm::{
+            DwmSetWindowAttribute, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR,
+        };
+        if let Ok(hwnd) = window.hwnd() {
+            let handle: HWND = hwnd.0 as _;
+            for (attr, hex) in [(DWMWA_CAPTION_COLOR, &bg), (DWMWA_TEXT_COLOR, &text)] {
+                if let Some(c) = hex_colorref(hex) {
+                    unsafe {
+                        let _ = DwmSetWindowAttribute(
+                            handle,
+                            attr,
+                            &c as *const u32 as *const core::ffi::c_void,
+                            4,
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[tauri::command]
 fn get_auto_sync(state: State<AppState>) -> Result<AutoSyncSettings, String> {
     state.with_engine(|e| e.auto_sync_settings())
@@ -756,6 +807,7 @@ fn main() {
             sync_game,
             resolve_conflict,
             fork_conflict,
+            set_titlebar,
             get_auto_sync,
             set_auto_sync,
             sync_all,
