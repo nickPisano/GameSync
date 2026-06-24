@@ -174,6 +174,12 @@ fn set_game_exe(id: String, path: Option<String>, state: State<AppState>) -> Res
     state.with_engine(|e| e.set_game_exe(&id, path.map(PathBuf::from)))
 }
 
+/// Replace a game's extra backup folders (snapshotted/restored with its save).
+#[tauri::command]
+fn set_extra_roots(id: String, roots: Vec<String>, state: State<AppState>) -> Result<(), String> {
+    state.with_engine(|e| e.set_extra_roots(&id, roots.into_iter().map(PathBuf::from).collect()))
+}
+
 #[tauri::command]
 fn rename_game(id: String, name: String, state: State<AppState>) -> Result<(), String> {
     state.with_engine(|e| e.rename_game(&id, &name))
@@ -790,6 +796,7 @@ fn main() {
             add_game,
             set_sync_enabled,
             set_game_exe,
+            set_extra_roots,
             rename_game,
             remove_game,
             redirect_save_folder,

@@ -16,6 +16,7 @@ interface Props {
   onRename: () => void;
   onRemove: () => void;
   onRedirect: () => void;
+  onSettings: () => void;
 }
 
 export function GameCard({
@@ -32,8 +33,10 @@ export function GameCard({
   onRename,
   onRemove,
   onRedirect,
+  onSettings,
 }: Props) {
   const { game, version_count, last_backup_ms } = view;
+  const extraCount = game.extra_roots?.length ?? 0;
   return (
     <div className="card">
       <div className="card-main">
@@ -43,6 +46,11 @@ export function GameCard({
         </div>
         <div className="card-path" title={game.save_root}>
           {game.save_root}
+          {extraCount > 0 && (
+            <span className="root-tag" title="Extra backup folders">
+              +{extraCount} folder{extraCount === 1 ? "" : "s"}
+            </span>
+          )}
         </div>
         <div className="card-meta">
           {version_count} version{version_count === 1 ? "" : "s"} · last backup{" "}
@@ -60,6 +68,15 @@ export function GameCard({
         <div className="card-meta card-secondary">
           <button className="linklike" onClick={onRename} disabled={busy}>
             Rename
+          </button>
+          <span className="muted">·</span>
+          <button
+            className="linklike"
+            onClick={onSettings}
+            disabled={busy}
+            title="Extra backup folders & auto-backup-on-close location"
+          >
+            Settings
           </button>
           <span className="muted">·</span>
           <button

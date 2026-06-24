@@ -178,6 +178,85 @@ fn restore_into_empty_folder() {
 }
 
 #[test]
+fn backup_and_restore_multiple_roots() {
+    let tmp = tempfile::tempdir().unwrap();
+    let saves = tmp.path().join("saves");
+    let config = tmp.path().join("elsewhere/config");
+    fs::create_dir_all(&saves).unwrap();
+    fs::create_dir_all(&config).unwrap();
+    let engine = Engine::open(tmp.path().join("data")).unwrap();
+
+    write(&saves.join("slot1.sav"), "save-v1");
+    write(&config.join("settings.ini"), "cfg-v1");
+
+    let game = engine.add_manual_game("Multi", saves.clone()).unwrap();
+    engine
+        .set_extra_roots(&game.id, vec![config.clone()])
+        .unwrap();
+
+    // v1 captures files from BOTH roots, each tagged with its root index.
+    let v1 = engine.backup(&game.id, BackupOptions::default()).unwrap();
+    assert_eq!(v1.files.len(), 2);
+    assert!(v1
+        .files
+        .iter()
+        .any(|f| f.root == 0 && f.rel_path == "slot1.sav"));
+    assert!(v1
+        .files
+        .iter()
+        .any(|f| f.root == 1 && f.rel_path == "settings.ini"));
+
+    // Change both roots and back up again.
+    write(&saves.join("slot1.sav"), "save-v2");
+    write(&config.join("settings.ini"), "cfg-v2");
+    engine.backup(&game.id, BackupOptions::default()).unwrap();
+
+    // Restoring v1 reverts BOTH roots to their v1 contents.
+    engine.restore(&game.id, &v1.version_id, false).unwrap();
+    assert_eq!(
+        read(&saves.join("slot1.sav")),
+        "save-v1",
+        "save root restored"
+    );
+    assert_eq!(
+        read(&config.join("settings.ini")),
+        "cfg-v1",
+        "extra root restored"
+    );
+    assert!(engine.verify().unwrap().ok());
+}
+
+#[test]
+fn restore_leaves_roots_absent_from_the_snapshot_untouched() {
+    // A version taken before an extra root was added must not wipe that root.
+    let tmp = tempfile::tempdir().unwrap();
+    let saves = tmp.path().join("saves");
+    let config = tmp.path().join("config");
+    fs::create_dir_all(&saves).unwrap();
+    fs::create_dir_all(&config).unwrap();
+    let engine = Engine::open(tmp.path().join("data")).unwrap();
+
+    write(&saves.join("a.sav"), "a");
+    let game = engine.add_manual_game("Late", saves.clone()).unwrap();
+    let v1 = engine.backup(&game.id, BackupOptions::default()).unwrap(); // save root only
+
+    // Add a second root with a file, AFTER v1.
+    write(&config.join("c.ini"), "c");
+    engine
+        .set_extra_roots(&game.id, vec![config.clone()])
+        .unwrap();
+
+    // Restoring v1 (which has no files for the new root) must leave it intact.
+    engine.restore(&game.id, &v1.version_id, false).unwrap();
+    assert_eq!(read(&saves.join("a.sav")), "a");
+    assert_eq!(
+        read(&config.join("c.ini")),
+        "c",
+        "a root with no files in the restored version must be left alone"
+    );
+}
+
+#[test]
 fn prune_and_gc_reclaim_unreferenced_objects() {
     let (tmp, engine, save) = setup();
     let data_dir = tmp.path().join("data");
@@ -675,6 +754,7 @@ fn running_game_ids_detects_known_install_dir() {
         includes: vec!["**".into()],
         excludes: vec![],
         sync_enabled: false,
+        extra_roots: vec![],
     };
     engine.db.upsert_game(&game).unwrap();
     assert!(engine

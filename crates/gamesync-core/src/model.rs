@@ -76,6 +76,21 @@ pub struct Game {
     pub excludes: Vec<String>,
     /// Whether automatic sync/backup is enabled for this game.
     pub sync_enabled: bool,
+    /// Additional folders backed up & restored together with `save_root` as one
+    /// versioned unit (e.g. a config dir kept elsewhere). Empty for most games.
+    #[serde(default)]
+    pub extra_roots: Vec<PathBuf>,
+}
+
+impl Game {
+    /// All backed-up roots in order: `save_root` is index 0, extras follow.
+    /// The index matches [`FileEntry::root`].
+    pub fn roots(&self) -> Vec<PathBuf> {
+        let mut v = Vec::with_capacity(1 + self.extra_roots.len());
+        v.push(self.save_root.clone());
+        v.extend(self.extra_roots.iter().cloned());
+        v
+    }
 }
 
 /// Why a snapshot was taken. `PreRestore` snapshots are the safety net captured
@@ -112,13 +127,17 @@ impl SnapshotKind {
 /// keyed by `hash`; this entry records how to put it back.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileEntry {
-    /// Path relative to `save_root`, forward-slash separated.
+    /// Path relative to its root, forward-slash separated.
     pub rel_path: String,
     pub hash: Hash,
     pub size: u64,
     pub mtime_ms: i64,
     /// Unix mode bits, 0 where not applicable.
     pub mode: u32,
+    /// Which backed-up root this file belongs to: 0 = `save_root`,
+    /// N = `extra_roots[N-1]`. Defaults to 0 for pre-multi-root manifests.
+    #[serde(default)]
+    pub root: u32,
 }
 
 /// An immutable, point-in-time capture of a game's save set.

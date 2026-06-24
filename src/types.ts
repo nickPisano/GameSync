@@ -12,6 +12,7 @@ export interface Game {
   includes: string[];
   excludes: string[];
   sync_enabled: boolean;
+  extra_roots: string[];
 }
 
 export interface GameView {

@@ -16,6 +16,7 @@ import { AddGameModal } from "./components/AddGameModal";
 import { VersionsModal } from "./components/VersionsModal";
 import { FilesModal } from "./components/FilesModal";
 import { RenameModal } from "./components/RenameModal";
+import { GameSettingsModal } from "./components/GameSettingsModal";
 import { EncryptModal } from "./components/EncryptModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { PluginsModal } from "./components/PluginsModal";
@@ -52,6 +53,7 @@ export function App() {
   const [historyGame, setHistoryGame] = useState<Game | null>(null);
   const [filesGame, setFilesGame] = useState<Game | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [settingsGame, setSettingsGame] = useState<Game | null>(null);
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   // LAN host auto-discovery (peer side): found hosts + in-flight flag.
@@ -615,6 +617,7 @@ export function App() {
               onSync={() => onSync(view)}
               onSetExe={() => onSetExe(view)}
               onRename={() => setRenaming({ id: view.game.id, name: view.game.name })}
+              onSettings={() => setSettingsGame(view.game)}
               onRemove={() => onRemove(view)}
               onRedirect={() => onRedirect(view)}
             />
@@ -702,6 +705,15 @@ export function App() {
             setRenaming(null);
             await refresh();
           }}
+        />
+      )}
+
+      {settingsGame && (
+        <GameSettingsModal
+          game={settingsGame}
+          onClose={() => setSettingsGame(null)}
+          notify={notify}
+          onChanged={refresh}
         />
       )}
 

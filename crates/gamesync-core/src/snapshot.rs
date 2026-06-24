@@ -151,43 +151,50 @@ pub fn create_snapshot_if_changed(
     Ok(Some(snapshot))
 }
 
-/// List the save-set files (relative path, size, mtime) that *would* be backed
-/// up, without hashing or storing anything. Powers the in-app file view.
-pub fn list_files(game: &Game) -> Result<Vec<(String, u64, i64)>> {
+/// List the save-set files (root index, relative path, size, mtime) that
+/// *would* be backed up across all of a game's roots, without hashing or
+/// storing anything. Powers the in-app file view.
+pub fn list_files(game: &Game) -> Result<Vec<(u32, String, u64, i64)>> {
     let matcher = Matcher::build(&game.includes, &game.excludes)?;
     let mut out = Vec::new();
-    if game.save_root.is_dir() {
-        for entry in WalkDir::new(&game.save_root).follow_links(false) {
+    for (idx, root) in game.roots().iter().enumerate() {
+        if !root.is_dir() {
+            continue;
+        }
+        for entry in WalkDir::new(root).follow_links(false) {
             let entry = entry.map_err(|e| Error::other(format!("walk error: {e}")))?;
             if !entry.file_type().is_file() {
                 continue;
             }
-            let rel = to_rel_slash(&game.save_root, entry.path());
+            let rel = to_rel_slash(root, entry.path());
             if rel.is_empty() || !matcher.matches(&rel) {
                 continue;
             }
             let meta = entry.metadata().map_err(|e| Error::other(e.to_string()))?;
-            out.push((rel, meta.len(), mtime_ms(&meta)));
+            out.push((idx as u32, rel, meta.len(), mtime_ms(&meta)));
         }
     }
-    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
     Ok(out)
 }
 
-/// Walk the save set, store contents in the CAS, and return the sorted file
-/// list plus total size.
+/// Walk every root, store contents in the CAS, and return the sorted file list
+/// (each tagged with its root) plus total size.
 fn collect_files(cas: &Cas, game: &Game) -> Result<(Vec<FileEntry>, u64)> {
     let matcher = Matcher::build(&game.includes, &game.excludes)?;
     let mut files: Vec<FileEntry> = Vec::new();
     let mut total: u64 = 0;
 
-    if game.save_root.is_dir() {
-        for entry in WalkDir::new(&game.save_root).follow_links(false) {
+    for (idx, root) in game.roots().iter().enumerate() {
+        if !root.is_dir() {
+            continue;
+        }
+        for entry in WalkDir::new(root).follow_links(false) {
             let entry = entry.map_err(|e| Error::other(format!("walk error: {e}")))?;
             if !entry.file_type().is_file() {
                 continue;
             }
-            let rel = to_rel_slash(&game.save_root, entry.path());
+            let rel = to_rel_slash(root, entry.path());
             if rel.is_empty() || !matcher.matches(&rel) {
                 continue;
             }
@@ -200,20 +207,21 @@ fn collect_files(cas: &Cas, game: &Game) -> Result<(Vec<FileEntry>, u64)> {
                 size,
                 mtime_ms: mtime_ms(&meta),
                 mode: file_mode(&meta),
+                root: idx as u32,
             });
         }
     }
-    // Deterministic ordering makes manifests stable and diffs meaningful.
-    files.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+    // Deterministic ordering (by root, then path) keeps manifests stable.
+    files.sort_by(|a, b| (a.root, &a.rel_path).cmp(&(b.root, &b.rel_path)));
     Ok((files, total))
 }
 
-/// Compare two (sorted) file lists by path + content hash only.
+/// Compare two (sorted) file lists by root + path + content hash only.
 fn same_contents(a: &[FileEntry], b: &[FileEntry]) -> bool {
     a.len() == b.len()
         && a.iter()
             .zip(b.iter())
-            .all(|(x, y)| x.rel_path == y.rel_path && x.hash == y.hash)
+            .all(|(x, y)| x.root == y.root && x.rel_path == y.rel_path && x.hash == y.hash)
 }
 
 #[allow(clippy::too_many_arguments)]

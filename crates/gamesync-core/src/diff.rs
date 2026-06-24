@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::Snapshot;
+use crate::model::{FileEntry, Snapshot};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diff {
@@ -29,35 +29,47 @@ impl Diff {
     }
 }
 
+/// A file's identity for diffing: (root index, relative path). Keyed on both so
+/// same-named files in different roots don't collide.
+fn key(f: &FileEntry) -> (u32, &str) {
+    (f.root, f.rel_path.as_str())
+}
+
+/// Human label for a diff entry; extra-root files get a `[N]` prefix.
+fn label(root: u32, rel: &str) -> String {
+    if root == 0 {
+        rel.to_string()
+    } else {
+        format!("[folder {}] {rel}", root + 1)
+    }
+}
+
 /// Diff `from` (older) against `to` (newer): the changes that turn `from` into
 /// `to`.
 pub fn diff(from: &Snapshot, to: &Snapshot) -> Diff {
-    let from_map: BTreeMap<&str, &str> = from
+    let from_map: BTreeMap<(u32, &str), &str> = from
         .files
         .iter()
-        .map(|f| (f.rel_path.as_str(), f.hash.as_str()))
+        .map(|f| (key(f), f.hash.as_str()))
         .collect();
-    let to_map: BTreeMap<&str, &str> = to
-        .files
-        .iter()
-        .map(|f| (f.rel_path.as_str(), f.hash.as_str()))
-        .collect();
+    let to_map: BTreeMap<(u32, &str), &str> =
+        to.files.iter().map(|f| (key(f), f.hash.as_str())).collect();
 
     let mut added = Vec::new();
     let mut removed = Vec::new();
     let mut modified = Vec::new();
     let mut unchanged = 0usize;
 
-    for (path, to_hash) in &to_map {
-        match from_map.get(path) {
-            None => added.push((*path).to_string()),
+    for ((root, path), to_hash) in &to_map {
+        match from_map.get(&(*root, *path)) {
+            None => added.push(label(*root, path)),
             Some(from_hash) if from_hash == to_hash => unchanged += 1,
-            Some(_) => modified.push((*path).to_string()),
+            Some(_) => modified.push(label(*root, path)),
         }
     }
-    for path in from_map.keys() {
-        if !to_map.contains_key(path) {
-            removed.push((*path).to_string());
+    for (root, path) in from_map.keys() {
+        if !to_map.contains_key(&(*root, *path)) {
+            removed.push(label(*root, path));
         }
     }
 
@@ -96,6 +108,7 @@ mod tests {
                     size: 0,
                     mtime_ms: 0,
                     mode: 0,
+                    root: 0,
                 })
                 .collect(),
         }

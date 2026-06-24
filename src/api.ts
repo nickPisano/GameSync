@@ -48,6 +48,8 @@ export const api = {
     invoke<void>("set_sync_enabled", { id, enabled }),
   setGameExe: (id: string, path: string | null) =>
     invoke<void>("set_game_exe", { id, path }),
+  setExtraRoots: (id: string, roots: string[]) =>
+    invoke<void>("set_extra_roots", { id, roots }),
   renameGame: (id: string, name: string) =>
     invoke<void>("rename_game", { id, name }),
   removeGame: (id: string) => invoke<void>("remove_game", { id }),

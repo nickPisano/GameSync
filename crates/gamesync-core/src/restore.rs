@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use crate::cas::Cas;
 use crate::db::Db;
 use crate::error::{Error, Result};
-use crate::model::{Game, Snapshot, SnapshotKind};
+use crate::model::{FileEntry, Game, Snapshot, SnapshotKind};
 use crate::snapshot::{create_snapshot, head_base};
 use crate::util::{new_id, rel_to_path};
 
@@ -52,8 +52,11 @@ pub fn restore_version(
         )));
     }
 
-    // 1. Safety snapshot of the current state (only if there's something there).
-    if opts.safety_snapshot && game.save_root.is_dir() {
+    let roots = game.roots();
+
+    // 1. Safety snapshot of the current state of every root (so the restore is
+    //    undoable), only if at least one root has something to capture.
+    if opts.safety_snapshot && roots.iter().any(|r| r.is_dir()) {
         let short = &version_id[..version_id.len().min(8)];
         let (base, parent) = head_base(db, &game.id)?;
         create_snapshot(
@@ -68,58 +71,111 @@ pub fn restore_version(
         )?;
     }
 
-    // Stage adjacent to the save root so the final rename stays on one fs.
-    let parent = game
-        .save_root
-        .parent()
-        .ok_or_else(|| Error::other("save_root has no parent directory"))?;
-    let staging = parent.join(format!(".gamesync-staging-{}", new_id()));
-    fs::create_dir_all(&staging)?;
-
-    // 2. Materialize + verify into staging.
-    let staged: Result<()> = (|| {
-        for fe in &target.files {
-            let dest = rel_to_path(&staging, &fe.rel_path);
-            cas.copy_to(&fe.hash, &dest)?;
-            if !Cas::verify_file(&dest, &fe.hash)? {
-                return Err(Error::Integrity(format!(
-                    "restored file {} failed checksum",
-                    fe.rel_path
-                )));
+    // 2. Stage + verify each root the target has files for. We only touch a root
+    //    the snapshot actually has files for, so restoring an older version
+    //    never empties a root that was added later. Stage everything (verifying
+    //    by hash) before swapping anything live.
+    struct Staged {
+        root: PathBuf,
+        staging: PathBuf,
+    }
+    let mut staged: Vec<Staged> = Vec::new();
+    let stage_all: Result<()> = (|| {
+        for (idx, root) in roots.iter().enumerate() {
+            let files: Vec<&FileEntry> = target
+                .files
+                .iter()
+                .filter(|f| f.root as usize == idx)
+                .collect();
+            if files.is_empty() {
+                continue;
+            }
+            // Stage adjacent to the root so the final rename stays on one fs.
+            let parent = root
+                .parent()
+                .ok_or_else(|| Error::other("restore root has no parent directory"))?;
+            let staging = parent.join(format!(".gamesync-staging-{}", new_id()));
+            fs::create_dir_all(&staging)?;
+            // Record the staging dir *before* materializing into it, so a
+            // mid-materialize failure still cleans it up below.
+            staged.push(Staged {
+                root: root.clone(),
+                staging,
+            });
+            let staging = &staged.last().unwrap().staging;
+            for fe in files {
+                let dest = rel_to_path(staging, &fe.rel_path);
+                cas.copy_to(&fe.hash, &dest)?;
+                if !Cas::verify_file(&dest, &fe.hash)? {
+                    return Err(Error::Integrity(format!(
+                        "restored file {} failed checksum",
+                        fe.rel_path
+                    )));
+                }
             }
         }
         Ok(())
     })();
-    if let Err(e) = staged {
-        let _ = fs::remove_dir_all(&staging);
+    if let Err(e) = stage_all {
+        for s in &staged {
+            let _ = fs::remove_dir_all(&s.staging);
+        }
         return Err(e);
     }
 
-    // 3. Atomic-ish swap with rollback.
-    let had_existing = game.save_root.is_dir();
-    let old: PathBuf = parent.join(format!(".gamesync-old-{}", new_id()));
-    if had_existing {
-        fs::rename(&game.save_root, &old)?;
-    } else if let Some(p) = game.save_root.parent() {
-        fs::create_dir_all(p)?;
+    // 3. Swap each staged root into place (atomic per folder), rolling back
+    //    every root already swapped if any swap fails.
+    struct Swapped {
+        root: PathBuf,
+        old: Option<PathBuf>,
     }
-
-    match fs::rename(&staging, &game.save_root) {
+    let mut swapped: Vec<Swapped> = Vec::new();
+    let swap_all: Result<()> = (|| {
+        for s in &staged {
+            let old = if s.root.is_dir() {
+                let old = s.root.with_file_name(format!(".gamesync-old-{}", new_id()));
+                fs::rename(&s.root, &old)?;
+                Some(old)
+            } else {
+                if let Some(p) = s.root.parent() {
+                    fs::create_dir_all(p)?;
+                }
+                None
+            };
+            fs::rename(&s.staging, &s.root)?;
+            swapped.push(Swapped {
+                root: s.root.clone(),
+                old,
+            });
+        }
+        Ok(())
+    })();
+    match swap_all {
         Ok(()) => {
-            if had_existing {
-                let _ = fs::remove_dir_all(&old);
+            for s in &swapped {
+                if let Some(old) = &s.old {
+                    let _ = fs::remove_dir_all(old);
+                }
             }
             // The live save now corresponds to the restored version.
             db.set_head(&game.id, &target.version_id)?;
             Ok(target)
         }
         Err(e) => {
-            // Roll the previous folder back into place.
-            if had_existing {
-                let _ = fs::rename(&old, &game.save_root);
+            // Roll back: drop the swapped-in folders, move the originals back.
+            for s in &swapped {
+                let _ = fs::remove_dir_all(&s.root);
+                if let Some(old) = &s.old {
+                    let _ = fs::rename(old, &s.root);
+                }
             }
-            let _ = fs::remove_dir_all(&staging);
-            Err(e.into())
+            // Clean up stagings that hadn't been swapped yet.
+            for st in &staged {
+                if !swapped.iter().any(|s| s.root == st.root) {
+                    let _ = fs::remove_dir_all(&st.staging);
+                }
+            }
+            Err(e)
         }
     }
 }

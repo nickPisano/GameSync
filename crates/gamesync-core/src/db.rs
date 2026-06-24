@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS games (
     includes        TEXT NOT NULL,
     excludes        TEXT NOT NULL,
     sync_enabled    INTEGER NOT NULL DEFAULT 0,
-    head_version_id TEXT
+    head_version_id TEXT,
+    extra_roots     TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS versions (
@@ -74,6 +75,10 @@ impl Db {
             .execute("ALTER TABLE games ADD COLUMN head_version_id TEXT", []);
         let _ = self.conn.execute(
             "ALTER TABLE versions ADD COLUMN vclock TEXT NOT NULL DEFAULT '{}'",
+            [],
+        );
+        let _ = self.conn.execute(
+            "ALTER TABLE games ADD COLUMN extra_roots TEXT NOT NULL DEFAULT '[]'",
             [],
         );
     }
@@ -144,13 +149,14 @@ impl Db {
     pub fn upsert_game(&self, g: &Game) -> Result<()> {
         let includes = serde_json::to_string(&g.includes)?;
         let excludes = serde_json::to_string(&g.excludes)?;
+        let extra_roots = serde_json::to_string(&g.extra_roots)?;
         let install = g
             .install_dir
             .as_ref()
             .map(|p| p.to_string_lossy().into_owned());
         self.conn.execute(
-            "INSERT INTO games (id, name, platform, save_root, install_dir, includes, excludes, sync_enabled)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "INSERT INTO games (id, name, platform, save_root, install_dir, includes, excludes, sync_enabled, extra_roots)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT(id) DO UPDATE SET
                 name        = excluded.name,
                 platform    = excluded.platform,
@@ -167,6 +173,7 @@ impl Db {
                 includes,
                 excludes,
                 g.sync_enabled as i64,
+                extra_roots,
             ],
         )?;
         Ok(())
@@ -176,6 +183,20 @@ impl Db {
         let n = self.conn.execute(
             "UPDATE games SET sync_enabled = ?2 WHERE id = ?1",
             params![game_id, enabled as i64],
+        )?;
+        if n == 0 {
+            return Err(Error::NotFound(format!("game {game_id}")));
+        }
+        Ok(())
+    }
+
+    /// Replace a game's extra backup roots (preserved across re-scan, like
+    /// `sync_enabled`, so it lives outside the upsert's conflict update).
+    pub fn set_extra_roots(&self, game_id: &str, roots: &[std::path::PathBuf]) -> Result<()> {
+        let json = serde_json::to_string(roots)?;
+        let n = self.conn.execute(
+            "UPDATE games SET extra_roots = ?2 WHERE id = ?1",
+            params![game_id, json],
         )?;
         if n == 0 {
             return Err(Error::NotFound(format!("game {game_id}")));
@@ -198,7 +219,7 @@ impl Db {
     pub fn get_game(&self, id: &str) -> Result<Game> {
         self.conn
             .query_row(
-                "SELECT id, name, platform, save_root, install_dir, includes, excludes, sync_enabled
+                "SELECT id, name, platform, save_root, install_dir, includes, excludes, sync_enabled, extra_roots
                  FROM games WHERE id = ?1",
                 params![id],
                 Self::row_to_game,
@@ -209,7 +230,7 @@ impl Db {
 
     pub fn list_games(&self) -> Result<Vec<Game>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, platform, save_root, install_dir, includes, excludes, sync_enabled
+            "SELECT id, name, platform, save_root, install_dir, includes, excludes, sync_enabled, extra_roots
              FROM games ORDER BY name COLLATE NOCASE",
         )?;
         let rows = stmt.query_map([], Self::row_to_game)?;
@@ -221,6 +242,7 @@ impl Db {
         let excludes: String = row.get(6)?;
         let install: Option<String> = row.get(4)?;
         let save_root: String = row.get(3)?;
+        let extra_roots: String = row.get(8).unwrap_or_else(|_| "[]".to_string());
         Ok(Game {
             id: row.get(0)?,
             name: row.get(1)?,
@@ -230,6 +252,7 @@ impl Db {
             includes: serde_json::from_str(&includes).unwrap_or_default(),
             excludes: serde_json::from_str(&excludes).unwrap_or_default(),
             sync_enabled: row.get::<_, i64>(7)? != 0,
+            extra_roots: serde_json::from_str(&extra_roots).unwrap_or_default(),
         })
     }
 

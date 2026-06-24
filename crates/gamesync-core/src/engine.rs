@@ -342,7 +342,11 @@ impl Engine {
                 install_dir: Some(app.install_dir.clone()),
                 includes: default_includes(),
                 excludes: default_excludes(),
-                sync_enabled: previous.map(|p| p.sync_enabled).unwrap_or(false),
+                sync_enabled: previous.as_ref().map(|p| p.sync_enabled).unwrap_or(false),
+                extra_roots: previous
+                    .as_ref()
+                    .map(|p| p.extra_roots.clone())
+                    .unwrap_or_default(),
             };
             self.db.upsert_game(&game)?;
             found.push(game);
@@ -366,7 +370,11 @@ impl Engine {
                 install_dir: None,
                 includes: default_includes(),
                 excludes: default_excludes(),
-                sync_enabled: previous.map(|p| p.sync_enabled).unwrap_or(false),
+                sync_enabled: previous.as_ref().map(|p| p.sync_enabled).unwrap_or(false),
+                extra_roots: previous
+                    .as_ref()
+                    .map(|p| p.extra_roots.clone())
+                    .unwrap_or_default(),
             };
             self.db.upsert_game(&game)?;
             found.push(game);
@@ -390,7 +398,11 @@ impl Engine {
                 install_dir: d.install_dir,
                 includes: default_includes(),
                 excludes: default_excludes(),
-                sync_enabled: previous.map(|p| p.sync_enabled).unwrap_or(false),
+                sync_enabled: previous.as_ref().map(|p| p.sync_enabled).unwrap_or(false),
+                extra_roots: previous
+                    .as_ref()
+                    .map(|p| p.extra_roots.clone())
+                    .unwrap_or_default(),
             };
             self.db.upsert_game(&game)?;
             found.push(game);
@@ -474,7 +486,11 @@ impl Engine {
             install_dir: Some(install_dir),
             includes: default_includes(),
             excludes: default_excludes(),
-            sync_enabled: previous.map(|p| p.sync_enabled).unwrap_or(false),
+            sync_enabled: previous.as_ref().map(|p| p.sync_enabled).unwrap_or(false),
+            extra_roots: previous
+                .as_ref()
+                .map(|p| p.extra_roots.clone())
+                .unwrap_or_default(),
         };
         self.db.upsert_game(&game)?;
         Ok(Some(game))
@@ -701,6 +717,7 @@ impl Engine {
             includes: default_includes(),
             excludes: default_excludes(),
             sync_enabled: false,
+            extra_roots: Vec::new(),
         };
         self.db.upsert_game(&game)?;
         Ok(game)
@@ -714,18 +731,29 @@ impl Engine {
     /// up), with absolute paths for revealing in the OS file manager.
     pub fn list_save_files(&self, game_id: &str) -> Result<Vec<SaveFile>> {
         let game = self.db.get_game(game_id)?;
+        let roots = game.roots();
         let files = crate::snapshot::list_files(&game)?;
         Ok(files
             .into_iter()
-            .map(|(rel, size, mtime_ms)| SaveFile {
-                abs_path: crate::util::rel_to_path(&game.save_root, &rel)
-                    .to_string_lossy()
-                    .into_owned(),
-                rel_path: rel,
-                size,
-                mtime_ms,
+            .map(|(root, rel, size, mtime_ms)| {
+                let base = roots.get(root as usize).unwrap_or(&game.save_root);
+                SaveFile {
+                    abs_path: crate::util::rel_to_path(base, &rel)
+                        .to_string_lossy()
+                        .into_owned(),
+                    rel_path: rel,
+                    size,
+                    mtime_ms,
+                }
             })
             .collect())
+    }
+
+    /// Replace a game's extra backup roots (folders snapshotted/restored
+    /// together with its save folder). Non-existent paths are kept but simply
+    /// contribute nothing until they exist.
+    pub fn set_extra_roots(&self, game_id: &str, roots: Vec<PathBuf>) -> Result<()> {
+        self.db.set_extra_roots(game_id, &roots)
     }
 
     pub fn get_game(&self, id: &str) -> Result<Game> {
@@ -1443,6 +1471,7 @@ impl Engine {
             includes: game.includes.clone(),
             excludes: game.excludes.clone(),
             sync_enabled: false,
+            extra_roots: Vec::new(),
         };
         self.db.upsert_game(&fork)?;
         Ok(fork)
