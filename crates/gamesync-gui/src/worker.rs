@@ -74,6 +74,7 @@ pub enum Cmd {
         to: String,
     },
     EnableEncryption(String),
+    DisableEncryption,
     MarkSetupComplete,
     ListPlugins,
     SetPluginEnabled {
@@ -375,6 +376,29 @@ fn handle(cmd: Cmd, engine: &mut Option<Engine>, data_dir: &Path, emit: &impl Fn
         return;
     }
 
+    // Disabling decrypts the store in place, then re-opens it plaintext.
+    if let Cmd::DisableEncryption = cmd {
+        emit(Evt::Busy(true));
+        let res = match engine.as_ref() {
+            Some(e) => e.disable_encryption(),
+            None => Err(gamesync_core::Error::other("the data store is not open")),
+        };
+        match res {
+            Ok(()) => match Engine::open(data_dir.to_path_buf()) {
+                Ok(e2) => {
+                    emit(Evt::Info("Encryption disabled.".to_string()));
+                    emit(Evt::Opened(meta(&e2, data_dir)));
+                    relist(&e2, emit);
+                    *engine = Some(e2);
+                }
+                Err(err) => emit(Evt::Error(format!("Re-open after disabling failed: {err}"))),
+            },
+            Err(err) => emit(Evt::Error(format!("Couldn't disable encryption: {err}"))),
+        }
+        emit(Evt::Busy(false));
+        return;
+    }
+
     let Some(e) = engine.as_ref() else {
         emit(Evt::Error("the data store is not open".to_string()));
         return;
@@ -384,6 +408,7 @@ fn handle(cmd: Cmd, engine: &mut Option<Engine>, data_dir: &Path, emit: &impl Fn
     match cmd {
         Cmd::Unlock(_) => unreachable!("handled above"),
         Cmd::EnableEncryption(_) => unreachable!("handled above"),
+        Cmd::DisableEncryption => unreachable!("handled above"),
         Cmd::Scan => match e.scan_all() {
             Ok(found) => {
                 emit(Evt::Info(format!(

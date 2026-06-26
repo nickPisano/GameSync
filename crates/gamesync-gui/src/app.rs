@@ -111,7 +111,12 @@ pub struct App {
     setup_complete: bool,
     wizard_dismissed: bool,
 
+    /// Enable-encryption modal: open flag + passphrase/confirm buffers.
+    show_encryption: bool,
+    /// Disable-encryption confirmation modal.
+    show_disable_encryption: bool,
     enc_pass: String,
+    enc_confirm: String,
     recovery_key: Option<String>,
 
     show_plugins: bool,
@@ -193,7 +198,10 @@ impl App {
             show_diff: false,
             setup_complete: true,
             wizard_dismissed: false,
+            show_encryption: false,
+            show_disable_encryption: false,
             enc_pass: String::new(),
+            enc_confirm: String::new(),
             recovery_key: None,
             show_plugins: false,
             plugins: None,
@@ -904,151 +912,166 @@ impl App {
             return;
         }
         let mut open = self.show_settings;
+        // Size the modal relative to the window so it grows/shrinks with it;
+        // the inner ScrollArea keeps a tall settings list reachable when space
+        // is tight (and the centered title bar stays visible).
+        let sr = ctx.screen_rect();
+        let w = (sr.width() * 0.6).clamp(380.0, 680.0);
+        let h = (sr.height() * 0.82).clamp(300.0, (sr.height() - 80.0).max(300.0));
         egui::Window::new("Settings")
             .open(&mut open)
             .collapsible(false)
-            .resizable(true)
-            .default_width(440.0)
+            .fixed_size([w, h])
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .frame(modal_frame(ctx))
             .show(ctx, |ui| {
-                ui.heading("Appearance");
-                ui.add_space(4.0);
-                ui.horizontal_wrapped(|ui| {
-                    for t in Theme::ALL {
-                        let selected = !self.use_custom && self.theme == t;
-                        if let ThemePick::Select =
-                            theme_choice(ui, t.name(), t.bg(), t.accent(), None, selected, false)
-                        {
-                            self.theme = t;
-                            self.use_custom = false;
-                            self.theme_dirty = true;
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false; 2])
+                    .show(ui, |ui| {
+                    ui.heading("Appearance");
+                    ui.add_space(4.0);
+                    ui.horizontal_wrapped(|ui| {
+                        for t in Theme::ALL {
+                            let selected = !self.use_custom && self.theme == t;
+                            if let ThemePick::Select = theme_choice(
+                                ui,
+                                t.name(),
+                                t.bg(),
+                                t.accent(),
+                                None,
+                                selected,
+                                false,
+                            ) {
+                                self.theme = t;
+                                self.use_custom = false;
+                                self.theme_dirty = true;
+                            }
                         }
-                    }
-                });
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    if ui.button("Show all themes…").clicked() {
-                        self.show_themes = true;
-                    }
-                    ui.label(
-                        RichText::new("Custom imports & the full gallery")
-                            .weak()
-                            .small(),
-                    );
-                });
+                    });
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("Show all themes…").clicked() {
+                            self.show_themes = true;
+                        }
+                        ui.label(
+                            RichText::new("Custom imports & the full gallery")
+                                .weak()
+                                .small(),
+                        );
+                    });
 
-                ui.separator();
-                ui.heading("Sync");
-                let mut s = self.auto_sync;
-                let mut changed = false;
-                changed |= ui
-                    .checkbox(&mut s.enabled, "Automatic background sync")
-                    .changed();
-                ui.horizontal(|ui| {
-                    ui.label("Every");
+                    ui.separator();
+                    ui.heading("Sync");
+                    let mut s = self.auto_sync;
+                    let mut changed = false;
                     changed |= ui
-                        .add(egui::DragValue::new(&mut s.interval_min).range(1..=1440))
+                        .checkbox(&mut s.enabled, "Automatic background sync")
                         .changed();
-                    ui.label("minutes");
-                });
-                changed |= ui
-                    .checkbox(
-                        &mut s.backup_on_exit,
-                        "Back up automatically when a game closes",
-                    )
-                    .changed();
-                if changed {
-                    let _ = tx.send(Cmd::SetAutoSync(s));
-                }
+                    ui.horizontal(|ui| {
+                        ui.label("Every");
+                        changed |= ui
+                            .add(egui::DragValue::new(&mut s.interval_min).range(1..=1440))
+                            .changed();
+                        ui.label("minutes");
+                    });
+                    changed |= ui
+                        .checkbox(
+                            &mut s.backup_on_exit,
+                            "Back up automatically when a game closes",
+                        )
+                        .changed();
+                    if changed {
+                        let _ = tx.send(Cmd::SetAutoSync(s));
+                    }
 
-                ui.separator();
-                ui.heading("Storage");
-                let mut comp = self.compression;
-                if ui
-                    .checkbox(&mut comp, "Compress stored saves (LZMA2)")
-                    .changed()
-                {
-                    let _ = tx.send(Cmd::SetCompression(comp));
-                }
-                ui.horizontal(|ui| {
-                    if ui.button("Calculate usage").clicked() {
-                        let _ = tx.send(Cmd::FetchStorage);
+                    ui.separator();
+                    ui.heading("Storage");
+                    let mut comp = self.compression;
+                    if ui
+                        .checkbox(&mut comp, "Compress stored saves (LZMA2)")
+                        .changed()
+                    {
+                        let _ = tx.send(Cmd::SetCompression(comp));
                     }
-                    if ui.button("Verify integrity").clicked() {
-                        let _ = tx.send(Cmd::Verify);
+                    ui.horizontal(|ui| {
+                        if ui.button("Calculate usage").clicked() {
+                            let _ = tx.send(Cmd::FetchStorage);
+                        }
+                        if ui.button("Verify integrity").clicked() {
+                            let _ = tx.send(Cmd::Verify);
+                        }
+                    });
+                    if let Some(st) = &self.storage {
+                        ui.label(format!(
+                            "{} objects · {} on disk{}",
+                            st.total_objects,
+                            human_size(st.total_bytes),
+                            if st.compressed { " (compressed)" } else { "" }
+                        ));
                     }
-                });
-                if let Some(st) = &self.storage {
+
+                    ui.separator();
+                    ui.heading("Game detection");
                     ui.label(format!(
-                        "{} objects · {} on disk{}",
-                        st.total_objects,
-                        human_size(st.total_bytes),
-                        if st.compressed { " (compressed)" } else { "" }
+                        "{} games in the detection database",
+                        self.known_games
                     ));
-                }
+                    if ui.button("Update game list").clicked() {
+                        let _ = tx.send(Cmd::UpdateList);
+                    }
 
-                ui.separator();
-                ui.heading("Game detection");
-                ui.label(format!(
-                    "{} games in the detection database",
-                    self.known_games
-                ));
-                if ui.button("Update game list").clicked() {
-                    let _ = tx.send(Cmd::UpdateList);
-                }
-
-                ui.separator();
-                ui.heading("Encryption");
-                if self.encrypted {
-                    ui.label("Enabled (zero-knowledge).");
-                } else {
-                    ui.label(
+                    ui.separator();
+                    ui.heading("Encryption");
+                    if self.encrypted {
+                        ui.label("Enabled (zero-knowledge).");
+                        if ui.button("Disable encryption…").clicked() {
+                            self.show_disable_encryption = true;
+                        }
+                    } else {
+                        ui.label(
                         RichText::new(
                             "Encrypt all stored saves. Only possible on an empty store; you'll \
                              get a one-time recovery key.",
                         )
                         .weak(),
                     );
-                    ui.horizontal(|ui| {
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.enc_pass)
-                                .password(true)
-                                .hint_text("Passphrase (min 8 chars)")
-                                .desired_width(240.0),
-                        );
-                        if ui.button("Enable encryption").clicked() && self.enc_pass.len() >= 8 {
-                            let _ = tx.send(Cmd::EnableEncryption(self.enc_pass.clone()));
+                        if ui.button("Enable encryption…").clicked() {
                             self.enc_pass.clear();
+                            self.enc_confirm.clear();
+                            self.show_encryption = true;
+                        }
+                    }
+
+                    ui.separator();
+                    ui.heading("LAN");
+                    ui.horizontal(|ui| {
+                        if ui.button("Find LAN hosts").clicked() {
+                            let _ = tx.send(Cmd::DiscoverLan);
+                        }
+                        if !self.lan_hosts.is_empty() {
+                            ui.label(
+                                RichText::new(format!("{} found", self.lan_hosts.len())).weak(),
+                            );
                         }
                     });
-                }
-
-                ui.separator();
-                ui.heading("LAN");
-                ui.horizontal(|ui| {
-                    if ui.button("Find LAN hosts").clicked() {
-                        let _ = tx.send(Cmd::DiscoverLan);
+                    for (name, endpoint) in &self.lan_hosts {
+                        ui.horizontal(|ui| {
+                            if ui.small_button("Use").clicked() {
+                                self.remote_buf = format!("lan:@{endpoint}");
+                            }
+                            ui.label(format!("{name} — {endpoint}"));
+                        });
                     }
-                    if !self.lan_hosts.is_empty() {
-                        ui.label(RichText::new(format!("{} found", self.lan_hosts.len())).weak());
+
+                    ui.separator();
+                    ui.heading("Updates");
+                    if ui.button("Check for updates").clicked() {
+                        let _ = tx.send(Cmd::CheckUpdate);
+                    }
+                    if let Some(s) = &self.update_status {
+                        ui.label(s.as_str());
                     }
                 });
-                for (name, endpoint) in &self.lan_hosts {
-                    ui.horizontal(|ui| {
-                        if ui.small_button("Use").clicked() {
-                            self.remote_buf = format!("lan:@{endpoint}");
-                        }
-                        ui.label(format!("{name} — {endpoint}"));
-                    });
-                }
-
-                ui.separator();
-                ui.heading("Updates");
-                if ui.button("Check for updates").clicked() {
-                    let _ = tx.send(Cmd::CheckUpdate);
-                }
-                if let Some(s) = &self.update_status {
-                    ui.label(s.as_str());
-                }
             });
         self.show_settings = open;
     }
@@ -1067,6 +1090,8 @@ impl App {
             .collapsible(false)
             .resizable(true)
             .default_width(440.0)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .frame(modal_frame(ctx))
             .show(ctx, |ui| {
                 ui.label(RichText::new("Pick a theme, or import your own.").weak());
                 ui.add_space(6.0);
@@ -1091,8 +1116,7 @@ impl App {
                         glow: Option<Color32>,
                     },
                 }
-                let mut entries: Vec<Entry> =
-                    Theme::ALL.into_iter().map(Entry::Builtin).collect();
+                let mut entries: Vec<Entry> = Theme::ALL.into_iter().map(Entry::Builtin).collect();
                 if let Some((name, bg, accent_c, g)) = custom_info {
                     entries.push(Entry::Custom {
                         name,
@@ -1146,9 +1170,7 @@ impl App {
                                             self.use_custom = false;
                                             self.theme_dirty = true;
                                             self.toasts.push(Toast {
-                                                msg: format!(
-                                                    "Removed imported theme \"{name}\"."
-                                                ),
+                                                msg: format!("Removed imported theme \"{name}\"."),
                                                 kind: ToastKind::Info,
                                                 at: Instant::now(),
                                             });
@@ -1236,6 +1258,130 @@ impl App {
                 }
             });
         self.show_themes = open;
+    }
+
+    /// The "Enable encryption" modal: passphrase + confirm, with validation.
+    /// On enable it sends the command; the one-time recovery key then pops up
+    /// via the existing recovery modal.
+    fn render_encryption_modal(&mut self, ctx: &egui::Context, tx: &Sender<Cmd>) {
+        if !self.show_encryption {
+            return;
+        }
+        let accent = self.accent();
+        let mut open = self.show_encryption;
+        egui::Window::new("Enable encryption")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .default_width(380.0)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .frame(modal_frame(ctx))
+            .show(ctx, |ui| {
+                ui.label(
+                    RichText::new(
+                        "Encrypts all saved data at rest with a passphrase (zero-knowledge). \
+                         Only available on a store with no data yet.",
+                    )
+                    .weak(),
+                );
+                ui.add_space(10.0);
+                ui.label("Passphrase (min 8 chars)");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.enc_pass)
+                        .password(true)
+                        .desired_width(f32::INFINITY),
+                );
+                ui.add_space(6.0);
+                ui.label("Confirm passphrase");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.enc_confirm)
+                        .password(true)
+                        .desired_width(f32::INFINITY),
+                );
+
+                let long_enough = self.enc_pass.len() >= 8;
+                let matches = self.enc_pass == self.enc_confirm;
+                if !self.enc_confirm.is_empty() && !matches {
+                    ui.add_space(6.0);
+                    ui.colored_label(
+                        Color32::from_rgb(0xe0, 0x6c, 0x6c),
+                        "Passphrases don't match.",
+                    );
+                }
+
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    let valid = long_enough && matches;
+                    let enable = ui.add_enabled(
+                        valid,
+                        egui::Button::new(RichText::new("Enable").color(Color32::WHITE))
+                            .fill(accent),
+                    );
+                    if enable.clicked() {
+                        let _ = tx.send(Cmd::EnableEncryption(self.enc_pass.clone()));
+                        self.enc_pass.clear();
+                        self.enc_confirm.clear();
+                        self.show_encryption = false;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        self.enc_pass.clear();
+                        self.enc_confirm.clear();
+                        self.show_encryption = false;
+                    }
+                });
+            });
+        if !open {
+            // Closed via the window ✕ — drop any typed passphrase.
+            self.enc_pass.clear();
+            self.enc_confirm.clear();
+            self.show_encryption = false;
+        }
+    }
+
+    /// Confirmation modal for turning encryption back off.
+    fn render_disable_encryption_modal(&mut self, ctx: &egui::Context, tx: &Sender<Cmd>) {
+        if !self.show_disable_encryption {
+            return;
+        }
+        let mut open = self.show_disable_encryption;
+        egui::Window::new("Disable encryption")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .default_width(380.0)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .frame(modal_frame(ctx))
+            .show(ctx, |ui| {
+                ui.label(
+                    RichText::new(
+                        "This decrypts all stored saves back to plaintext on disk and removes \
+                         the recovery key. Your saves stay intact — they just won't be encrypted \
+                         at rest anymore.",
+                    )
+                    .weak(),
+                );
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new("Disable encryption").color(Color32::WHITE),
+                            )
+                            .fill(Color32::from_rgb(0xc0, 0x55, 0x55)),
+                        )
+                        .clicked()
+                    {
+                        let _ = tx.send(Cmd::DisableEncryption);
+                        self.show_disable_encryption = false;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        self.show_disable_encryption = false;
+                    }
+                });
+            });
+        if !open {
+            self.show_disable_encryption = false;
+        }
     }
 
     fn render_add(&mut self, ctx: &egui::Context, tx: &Sender<Cmd>) {
@@ -1652,6 +1798,12 @@ fn panel_frame(ctx: &egui::Context, v: i8) -> egui::Frame {
         })
 }
 
+/// Window frame for the Settings/Themes modals: the default window styling with
+/// generous, balanced inner padding so content isn't cramped against the edges.
+fn modal_frame(ctx: &egui::Context) -> egui::Frame {
+    egui::Frame::window(&ctx.style()).inner_margin(egui::Margin::symmetric(22, 16))
+}
+
 fn fract(x: f32) -> f32 {
     x - x.floor()
 }
@@ -2059,6 +2211,8 @@ impl eframe::App for App {
         self.render_library(ctx, &tx);
         self.render_settings(ctx, &tx);
         self.render_themes_modal(ctx);
+        self.render_encryption_modal(ctx, &tx);
+        self.render_disable_encryption_modal(ctx, &tx);
         self.render_add(ctx, &tx);
         self.render_game_settings(ctx, &tx);
         self.render_files(ctx);
