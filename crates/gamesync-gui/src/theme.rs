@@ -1,9 +1,11 @@
 //! Built-in + imported custom themes, and their persistence.
 //!
 //! Palettes are the exact values from the web build's `styles.css`
-//! (`[data-theme]`) / `theme.ts`. egui is themed through [`egui::Visuals`]; the
-//! chosen theme (and any imported custom one) is persisted next to the engine's
-//! data dir as `gui-prefs.json`.
+//! (`[data-theme]`) / `theme.ts`. Imported custom themes use the web build's
+//! JSON shape (`{ name, colors: {...}, effects: { gradient, bubbles, ... } }`);
+//! the gradient + bubble effects are painted by the app (the glass/neo/skeuo
+//! surface blurs are CSS-only and have no egui equivalent). The selection is
+//! persisted next to the engine's data dir as `gui-prefs.json`.
 
 use std::path::Path;
 
@@ -15,7 +17,6 @@ use serde::{Deserialize, Serialize};
 pub fn apply_style(ctx: &egui::Context) {
     use egui::{FontFamily, FontId, TextStyle};
     let mut style = (*ctx.style()).clone();
-    // Match the web build's type scale (body 14px, meta/small 12px, buttons 13px).
     style.text_styles = [
         (
             TextStyle::Heading,
@@ -49,7 +50,6 @@ pub enum Theme {
     Grape,
 }
 
-/// One theme's colors (matches the web build's CSS variables).
 struct Palette {
     bg: Color32,
     panel: Color32,
@@ -62,6 +62,10 @@ struct Palette {
 
 fn rgb(hex: u32) -> Color32 {
     Color32::from_rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8)
+}
+
+fn c32(a: [u8; 3]) -> Color32 {
+    Color32::from_rgb(a[0], a[1], a[2])
 }
 
 impl Theme {
@@ -135,39 +139,85 @@ impl Theme {
     }
 }
 
-/// An imported theme: accent + background; panels/text are derived.
-#[derive(Clone)]
+/// An imported theme: a full palette plus optional gradient + bubble effects.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Custom {
     pub name: String,
     pub accent: [u8; 3],
     pub bg: [u8; 3],
+    #[serde(default)]
     pub light: bool,
+    #[serde(default)]
+    pub panel: Option<[u8; 3]>,
+    #[serde(default)]
+    pub card: Option<[u8; 3]>,
+    #[serde(default)]
+    pub border: Option<[u8; 3]>,
+    #[serde(default)]
+    pub text: Option<[u8; 3]>,
+    /// 2–4 gradient stops (top→bottom) painted behind the UI. Empty = none.
+    #[serde(default)]
+    pub gradient: Vec<[u8; 3]>,
+    #[serde(default)]
+    pub bubbles: bool,
+    #[serde(default)]
+    pub bubble_color: Option<[u8; 3]>,
 }
 
 impl Custom {
     pub fn accent_color(&self) -> Color32 {
-        Color32::from_rgb(self.accent[0], self.accent[1], self.accent[2])
+        c32(self.accent)
+    }
+
+    pub fn bg_color(&self) -> Color32 {
+        c32(self.bg)
+    }
+
+    /// Whether this theme paints a gradient and/or bubbles behind the UI.
+    pub fn is_fancy(&self) -> bool {
+        self.gradient.len() >= 2 || self.bubbles
+    }
+
+    pub fn gradient_colors(&self) -> Vec<Color32> {
+        self.gradient.iter().map(|&c| c32(c)).collect()
+    }
+
+    pub fn bubble_color32(&self) -> Color32 {
+        self.bubble_color
+            .map(c32)
+            .unwrap_or_else(|| c32(self.accent))
     }
 
     fn palette(&self) -> Palette {
-        let bg = Color32::from_rgb(self.bg[0], self.bg[1], self.bg[2]);
+        let bg = c32(self.bg);
         Palette {
             bg,
-            panel: bg.gamma_multiply(1.35),
-            card: bg.gamma_multiply(1.7),
-            border: bg.gamma_multiply(2.2),
-            text: if self.light {
+            panel: self
+                .panel
+                .map(c32)
+                .unwrap_or_else(|| bg.gamma_multiply(1.35)),
+            card: self.card.map(c32).unwrap_or_else(|| bg.gamma_multiply(1.7)),
+            border: self
+                .border
+                .map(c32)
+                .unwrap_or_else(|| bg.gamma_multiply(2.2)),
+            text: self.text.map(c32).unwrap_or(if self.light {
                 rgb(0x1b2027)
             } else {
                 rgb(0xe6e9ee)
-            },
-            accent: self.accent_color(),
+            }),
+            accent: c32(self.accent),
             light: self.light,
         }
     }
 
     pub fn visuals(&self) -> Visuals {
-        themed_visuals(&self.palette())
+        let mut v = themed_visuals(&self.palette());
+        // Let the painted gradient/bubbles show through the panels.
+        if self.is_fancy() {
+            v.panel_fill = Color32::TRANSPARENT;
+        }
+        v
     }
 }
 
@@ -210,34 +260,104 @@ fn hex3(s: &str) -> Option<[u8; 3]> {
     ])
 }
 
+fn is_light(c: [u8; 3]) -> bool {
+    0.299 * c[0] as f32 + 0.587 * c[1] as f32 + 0.114 * c[2] as f32 > 150.0
+}
+
+// ---- import (web build's JSON shape) -------------------------------------
+
+#[derive(Deserialize, Default)]
+struct ImportColors {
+    #[serde(default)]
+    bg: Option<String>,
+    #[serde(default)]
+    panel: Option<String>,
+    #[serde(default, rename = "panel-2")]
+    panel2: Option<String>,
+    #[serde(default)]
+    border: Option<String>,
+    #[serde(default)]
+    text: Option<String>,
+    #[serde(default)]
+    accent: Option<String>,
+}
+
+#[derive(Deserialize, Default)]
+struct ImportEffects {
+    #[serde(default)]
+    gradient: Option<Vec<String>>,
+    #[serde(default)]
+    bubbles: Option<bool>,
+    #[serde(default, rename = "bubbleColor")]
+    bubble_color: Option<String>,
+    #[serde(default)]
+    highlight: Option<String>,
+}
+
 #[derive(Deserialize)]
-struct CustomJson {
+struct Import {
     name: String,
-    accent: String,
+    #[serde(default)]
+    colors: Option<ImportColors>,
+    #[serde(default)]
+    effects: Option<ImportEffects>,
+    // Fallback simple shape.
+    #[serde(default)]
+    accent: Option<String>,
     #[serde(default)]
     background: Option<String>,
     #[serde(default)]
-    light: bool,
+    light: Option<bool>,
 }
 
-/// Parse an imported theme JSON: `{"name","accent":"#rrggbb","background":"#rrggbb","light":false}`.
+/// Parse an imported theme: the web build's `{name, colors, effects}` shape, or
+/// the simpler `{name, accent, background, light}`.
 pub fn parse_custom(json: &str) -> Option<Custom> {
-    let c: CustomJson = serde_json::from_str(json).ok()?;
-    let accent = hex3(&c.accent)?;
-    let bg = c
-        .background
-        .as_deref()
-        .and_then(hex3)
-        .unwrap_or(if c.light {
-            [246, 247, 249]
-        } else {
-            [15, 18, 22]
-        });
+    let imp: Import = serde_json::from_str(json).ok()?;
+    let colors = imp.colors.as_ref();
+    let accent = colors
+        .and_then(|c| c.accent.as_deref())
+        .or(imp.accent.as_deref())
+        .and_then(hex3)?;
+    let bg_opt = colors
+        .and_then(|c| c.bg.as_deref())
+        .or(imp.background.as_deref())
+        .and_then(hex3);
+    let light = imp
+        .light
+        .unwrap_or_else(|| bg_opt.map(is_light).unwrap_or(false));
+    let bg = bg_opt.unwrap_or(if light { [246, 247, 249] } else { [15, 18, 22] });
+
+    let mut gradient = Vec::new();
+    let mut bubbles = false;
+    let mut bubble_color = None;
+    if let Some(fx) = &imp.effects {
+        if let Some(g) = &fx.gradient {
+            gradient = g.iter().filter_map(|s| hex3(s)).collect();
+            if gradient.len() < 2 {
+                gradient.clear();
+            }
+        }
+        bubbles = fx.bubbles.unwrap_or(false);
+        bubble_color = fx
+            .bubble_color
+            .as_deref()
+            .and_then(hex3)
+            .or(fx.highlight.as_deref().and_then(hex3));
+    }
+
     Some(Custom {
-        name: c.name,
+        name: imp.name,
         accent,
         bg,
-        light: c.light,
+        light,
+        panel: colors.and_then(|c| c.panel.as_deref()).and_then(hex3),
+        card: colors.and_then(|c| c.panel2.as_deref()).and_then(hex3),
+        border: colors.and_then(|c| c.border.as_deref()).and_then(hex3),
+        text: colors.and_then(|c| c.text.as_deref()).and_then(hex3),
+        gradient,
+        bubbles,
+        bubble_color,
     })
 }
 
@@ -251,15 +371,7 @@ pub struct Loaded {
 struct Prefs {
     theme: String,
     #[serde(default)]
-    custom: Option<CustomStored>,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct CustomStored {
-    name: String,
-    accent: [u8; 3],
-    bg: [u8; 3],
-    light: bool,
+    custom: Option<Custom>,
 }
 
 fn prefs_path(data_dir: &Path) -> std::path::PathBuf {
@@ -272,16 +384,10 @@ pub fn load(data_dir: &Path) -> Loaded {
         .and_then(|s| serde_json::from_str(&s).ok());
     match prefs {
         Some(p) => {
-            let custom = p.custom.map(|c| Custom {
-                name: c.name,
-                accent: c.accent,
-                bg: c.bg,
-                light: c.light,
-            });
-            let use_custom = p.theme == "custom" && custom.is_some();
+            let use_custom = p.theme == "custom" && p.custom.is_some();
             Loaded {
                 theme: Theme::from_name(&p.theme),
-                custom,
+                custom: p.custom,
                 use_custom,
             }
         }
@@ -300,12 +406,7 @@ pub fn save(data_dir: &Path, theme: Theme, custom: &Option<Custom>, use_custom: 
         } else {
             theme.name().to_string()
         },
-        custom: custom.as_ref().map(|c| CustomStored {
-            name: c.name.clone(),
-            accent: c.accent,
-            bg: c.bg,
-            light: c.light,
-        }),
+        custom: custom.clone(),
     };
     if let Ok(s) = serde_json::to_string_pretty(&prefs) {
         let _ = std::fs::create_dir_all(data_dir);

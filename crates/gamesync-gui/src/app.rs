@@ -1385,6 +1385,58 @@ fn panel_frame(ctx: &egui::Context, v: i8) -> egui::Frame {
         })
 }
 
+fn fract(x: f32) -> f32 {
+    x - x.floor()
+}
+
+fn lerp_color(a: Color32, b: Color32, t: f32) -> Color32 {
+    let t = t.clamp(0.0, 1.0);
+    let f = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    Color32::from_rgb(f(a.r(), b.r()), f(a.g(), b.g()), f(a.b(), b.b()))
+}
+
+fn sample_stops(stops: &[Color32], t: f32) -> Color32 {
+    match stops.len() {
+        0 => Color32::TRANSPARENT,
+        1 => stops[0],
+        n => {
+            let seg = t.clamp(0.0, 1.0) * (n - 1) as f32;
+            let i = (seg.floor() as usize).min(n - 2);
+            lerp_color(stops[i], stops[i + 1], seg - i as f32)
+        }
+    }
+}
+
+/// Paint a vertical multi-stop gradient across `rect` as fine horizontal strips.
+fn paint_gradient(painter: &egui::Painter, rect: egui::Rect, stops: &[Color32]) {
+    let strips = 48;
+    for i in 0..strips {
+        let t0 = i as f32 / strips as f32;
+        let t1 = (i + 1) as f32 / strips as f32;
+        let c = sample_stops(stops, (t0 + t1) * 0.5);
+        let r = egui::Rect::from_min_max(
+            egui::pos2(rect.left(), rect.top() + rect.height() * t0),
+            egui::pos2(rect.right(), rect.top() + rect.height() * t1),
+        );
+        painter.rect_filled(r, egui::CornerRadius::same(0), c);
+    }
+}
+
+/// Paint soft bubbles floating up `rect`, animated by `time` (seconds).
+fn paint_bubbles(painter: &egui::Painter, rect: egui::Rect, color: Color32, time: f64) {
+    let span = rect.height() + 80.0;
+    let col = color.gamma_multiply(0.10);
+    for i in 0..16u32 {
+        let s = i as f32;
+        let x = rect.left() + rect.width() * fract(s * 0.618_03 + 0.13);
+        let size = 10.0 + 26.0 * fract(s * 0.317 + 0.5);
+        let speed = 14.0 + 26.0 * fract(s * 0.523 + 0.2);
+        let phase = fract(s * 0.911) * span;
+        let y = rect.bottom() + 40.0 - ((time as f32 * speed + phase) % span);
+        painter.circle_filled(egui::pos2(x, y), size, col);
+    }
+}
+
 /// Open the OS file manager at `path` (revealing the file where supported).
 fn reveal(path: &str) {
     #[cfg(target_os = "macos")]
@@ -1461,6 +1513,28 @@ impl eframe::App for App {
         self.drain_events();
         self.toasts
             .retain(|t| t.at.elapsed() < Duration::from_secs(6));
+
+        // Custom-theme background effects: gradient + animated bubbles, painted
+        // behind the (transparent) panels.
+        if self.use_custom {
+            if let Some(c) = &self.custom_theme {
+                if c.is_fancy() {
+                    let rect = ctx.screen_rect();
+                    let painter = ctx.layer_painter(egui::LayerId::background());
+                    let grad = c.gradient_colors();
+                    if grad.len() >= 2 {
+                        paint_gradient(&painter, rect, &grad);
+                    } else {
+                        painter.rect_filled(rect, egui::CornerRadius::same(0), c.bg_color());
+                    }
+                    if c.bubbles {
+                        let t = ctx.input(|i| i.time);
+                        paint_bubbles(&painter, rect, c.bubble_color32(), t);
+                        ctx.request_repaint();
+                    }
+                }
+            }
+        }
 
         let tx = self.handle.tx();
 
