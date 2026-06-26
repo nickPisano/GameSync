@@ -1,0 +1,83 @@
+name: Native GUI build (VirusTotal test)
+
+# Builds the experimental webview-free egui front-end (crates/gamesync-gui) for
+# every OS/arch and uploads each raw binary as an artifact, so we can submit them
+# to VirusTotal and compare their behavior report against the Tauri/WebView2
+# build. This does NOT create a release — just downloadable artifacts.
+#
+# Runs automatically on pushes to the experiment branch, or manually via the
+# Actions tab ("Run workflow"). It is independent of main's CI/release.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [experiment/native-gui]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-universal
+            os: macos-latest
+            rust-targets: aarch64-apple-darwin x86_64-apple-darwin
+          - name: windows-x64
+            os: windows-latest
+          - name: windows-arm64
+            os: windows-11-arm
+          - name: linux-x64
+            os: ubuntu-22.04
+          - name: linux-arm64
+            os: ubuntu-22.04-arm
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # egui/winit Linux build dependencies (no WebView2/WebKit needed here).
+      - name: Install Linux GUI build deps
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Add extra Rust targets (macOS universal)
+        if: matrix.rust-targets != ''
+        run: rustup target add ${{ matrix.rust-targets }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build (host target)
+        if: matrix.rust-targets == ''
+        run: cargo build --release -p gamesync-gui
+
+      - name: Build universal macOS binary
+        if: matrix.rust-targets != ''
+        run: |
+          cargo build --release -p gamesync-gui --target aarch64-apple-darwin
+          cargo build --release -p gamesync-gui --target x86_64-apple-darwin
+          lipo -create -output gamesync-gui-macos-universal \
+            target/aarch64-apple-darwin/release/gamesync-gui \
+            target/x86_64-apple-darwin/release/gamesync-gui
+
+      - name: Stage binary for upload
+        shell: bash
+        run: |
+          mkdir -p out
+          case "${{ matrix.name }}" in
+            macos-universal) cp gamesync-gui-macos-universal "out/gamesync-gui-${{ matrix.name }}" ;;
+            windows-*)       cp target/release/gamesync-gui.exe "out/gamesync-gui-${{ matrix.name }}.exe" ;;
+            *)               cp target/release/gamesync-gui "out/gamesync-gui-${{ matrix.name }}" ;;
+          esac
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gamesync-gui-${{ matrix.name }}
+          path: out/*
+          if-no-files-found: error
