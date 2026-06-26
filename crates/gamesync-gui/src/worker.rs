@@ -6,7 +6,7 @@
 //! channels, keeping the egui thread responsive. The worker calls
 //! `ctx.request_repaint()` after each event so the UI wakes to consume it.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
@@ -27,7 +27,6 @@ pub enum Cmd {
     UpdateList,
     Versions(String),
     Backup(String),
-    RestoreLatest(String),
     Restore {
         game: String,
         version: String,
@@ -108,6 +107,8 @@ pub enum Evt {
         versions: Vec<Snapshot>,
     },
     Storage(StorageReport),
+    /// game id -> (version count, last backup epoch-ms)
+    Summaries(HashMap<String, (usize, Option<i64>)>),
     Files {
         game: String,
         files: Vec<SaveFile>,
@@ -207,7 +208,19 @@ fn run(rx: Receiver<Cmd>, emit: impl Fn(Evt)) {
 
 fn relist(e: &Engine, emit: &impl Fn(Evt)) {
     match e.list_games() {
-        Ok(g) => emit(Evt::Games(g)),
+        Ok(g) => {
+            let mut sums: HashMap<String, (usize, Option<i64>)> = HashMap::new();
+            for game in &g {
+                if let Ok(vs) = e.versions(&game.id) {
+                    sums.insert(
+                        game.id.clone(),
+                        (vs.len(), vs.first().map(|v| v.created_ms)),
+                    );
+                }
+            }
+            emit(Evt::Games(g));
+            emit(Evt::Summaries(sums));
+        }
         Err(err) => emit(Evt::Error(err.to_string())),
     }
 }
@@ -399,16 +412,6 @@ fn handle(cmd: Cmd, engine: &mut Option<Engine>, data_dir: &Path, emit: &impl Fn
                 relist(e, emit);
             }
             Err(err) => emit(Evt::Error(format!("Backup failed: {err}"))),
-        },
-        Cmd::RestoreLatest(id) => match e.restore_latest(&id, false) {
-            Ok(s) => {
-                emit(Evt::Info(format!(
-                    "Restored latest ({} files). Safety backup taken first.",
-                    s.file_count()
-                )));
-                emit_versions(e, &id, emit);
-            }
-            Err(err) => emit(Evt::Error(format!("Restore failed: {err}"))),
         },
         Cmd::Restore { game, version } => match e.restore(&game, &version, false) {
             Ok(s) => {

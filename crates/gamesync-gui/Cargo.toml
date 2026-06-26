@@ -19,3 +19,5 @@ serde_json = { workspace = true }
 rfd = "0.15"
 # System tray icon + menu (close-to-tray).
 tray-icon = "0.19"
+# Decode the brand PNG for the topbar logo (png only; same version eframe uses).
+image = { version = "0.25", default-features = false, features = ["png"] }
