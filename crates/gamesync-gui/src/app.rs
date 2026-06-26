@@ -314,10 +314,8 @@ impl App {
                     );
                 }
                 ui.add_space(4.0);
-                ui.vertical(|ui| {
-                    ui.label(RichText::new("GameSync").size(18.0).strong());
-                    ui.label(RichText::new("safe save backup & sync").weak().small());
-                });
+                ui.label(RichText::new("GameSync").size(18.0).strong());
+                ui.label(RichText::new("safe save backup & sync").weak().small());
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("Settings").clicked() {
                         self.show_settings = true;
@@ -439,13 +437,15 @@ impl App {
                         if !q.is_empty() && !g.name.to_lowercase().contains(&q) {
                             continue;
                         }
+                        let (count, last) = self.summaries.get(&g.id).copied().unwrap_or((0, None));
                         egui::Frame::group(ui.style())
                             .fill(card_fill)
+                            .inner_margin(egui::Margin::same(12))
                             .show(ui, |ui| {
                                 ui.set_min_width(ui.available_width());
                                 ui.horizontal(|ui| {
                                     ui.label(RichText::new(g.name.as_str()).size(16.0).strong());
-                                    badge(ui, g.platform.as_str(), accent);
+                                    badge(ui, g.platform.as_str());
                                     ui.with_layout(
                                         egui::Layout::right_to_left(egui::Align::Center),
                                         |ui| {
@@ -465,8 +465,6 @@ impl App {
                                         .weak()
                                         .small(),
                                 );
-                                let (count, last) =
-                                    self.summaries.get(&g.id).copied().unwrap_or((0, None));
                                 let last_str = last
                                     .map(humanize_ago)
                                     .unwrap_or_else(|| "never".to_string());
@@ -484,23 +482,23 @@ impl App {
                                             .small(),
                                     );
                                 }
-                                ui.add_space(5.0);
+                                ui.add_space(6.0);
                                 ui.horizontal(|ui| {
-                                    if primary_button(ui, "Back up", accent).clicked() {
+                                    if tonal_button(ui, "Back up", accent, true).clicked() {
                                         let _ = tx.send(Cmd::Backup(g.id.clone()));
                                     }
-                                    if tonal_button(ui, "Files", accent).clicked() {
+                                    if tonal_button(ui, "Files", accent, true).clicked() {
                                         self.files_game = Some(g.id.clone());
                                         self.files.clear();
                                         self.files_for = None;
                                         let _ = tx.send(Cmd::ListFiles(g.id.clone()));
                                     }
-                                    if tonal_button(ui, "History", accent).clicked() {
+                                    if tonal_button(ui, "History", accent, count > 0).clicked() {
                                         self.show_history = Some(g.id.clone());
                                         let _ = tx.send(Cmd::Versions(g.id.clone()));
                                     }
-                                    if self.remote.is_some()
-                                        && tonal_button(ui, "Sync now", accent).clicked()
+                                    if tonal_button(ui, "Sync now", accent, self.remote.is_some())
+                                        .clicked()
                                     {
                                         let _ = tx.send(Cmd::Sync(g.id.clone()));
                                     }
@@ -543,7 +541,7 @@ impl App {
                                         self.rename_buf = g.name.clone();
                                     }
                                     ui.label(RichText::new("·").weak());
-                                    if ui.link("Settings").clicked() {
+                                    if ui.link("Redirect to synced folder").clicked() {
                                         self.gs_game = Some(g.id.clone());
                                         self.gs_extra = g
                                             .extra_roots
@@ -557,7 +555,17 @@ impl App {
                                             .unwrap_or_default();
                                     }
                                     ui.label(RichText::new("·").weak());
-                                    if ui.link("Remove").clicked() {
+                                    if ui
+                                        .add(
+                                            egui::Label::new(
+                                                RichText::new("Remove")
+                                                    .color(Color32::from_rgb(0xe0, 0x6c, 0x6c)),
+                                            )
+                                            .sense(egui::Sense::click()),
+                                        )
+                                        .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                        .clicked()
+                                    {
                                         self.confirm_remove = Some(g.id.clone());
                                     }
                                 });
@@ -598,7 +606,7 @@ impl App {
                                         });
                                     }
                                     if let Some(parent) = &v.parent {
-                                        if tonal_button(ui, "Diff", accent).clicked() {
+                                        if tonal_button(ui, "Diff", accent, true).clicked() {
                                             let _ = tx.send(Cmd::Diff {
                                                 game: game.clone(),
                                                 from: parent.clone(),
@@ -1258,13 +1266,17 @@ fn primary_button(ui: &mut egui::Ui, text: &str, accent: Color32) -> egui::Respo
     ui.add(egui::Button::new(RichText::new(text).color(Color32::WHITE)).fill(accent))
 }
 
-/// A subtle accent-tinted button.
-fn tonal_button(ui: &mut egui::Ui, text: &str, accent: Color32) -> egui::Response {
-    ui.add(egui::Button::new(RichText::new(text).color(accent)).fill(accent.gamma_multiply(0.18)))
+/// A tonal button: accent text, faint accent fill, thin accent border. Greyed
+/// out when `enabled` is false (for not-yet-applicable actions).
+fn tonal_button(ui: &mut egui::Ui, text: &str, accent: Color32, enabled: bool) -> egui::Response {
+    let btn = egui::Button::new(RichText::new(text).color(accent))
+        .fill(accent.gamma_multiply(0.10))
+        .stroke(egui::Stroke::new(1.0, accent.gamma_multiply(0.45)));
+    ui.add_enabled(enabled, btn)
 }
 
-/// A small pill badge with the first letter capitalized.
-fn badge(ui: &mut egui::Ui, text: &str, color: Color32) {
+/// A small readable pill badge with the first letter capitalized.
+fn badge(ui: &mut egui::Ui, text: &str) {
     let mut label = String::new();
     let mut chars = text.chars();
     if let Some(first) = chars.next() {
@@ -1275,8 +1287,8 @@ fn badge(ui: &mut egui::Ui, text: &str, color: Color32) {
         RichText::new(format!(" {label} "))
             .small()
             .strong()
-            .color(color)
-            .background_color(color.gamma_multiply(0.25)),
+            .color(Color32::from_rgb(0xd6, 0xd2, 0xe6))
+            .background_color(Color32::from_rgb(0x39, 0x34, 0x4a)),
     );
 }
 
