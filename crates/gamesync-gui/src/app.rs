@@ -6,15 +6,17 @@
 //! top-level `render_*` method is a separate `&mut self` call from `update`.
 
 use std::path::PathBuf;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Color32, RichText};
 use gamesync_core::{
     AutoSyncSettings, Diff, Engine, Game, PluginList, SaveFile, Snapshot, StorageReport,
 };
+use tray_icon::TrayIcon;
 
-use crate::theme::Theme;
+use crate::theme::{Custom, Theme};
+use crate::tray::{self, TrayAction};
 use crate::util::{human_size, humanize_ago, short};
 use crate::worker::{self, Cmd, EngineHandle, Evt, Meta};
 
@@ -101,14 +103,31 @@ pub struct App {
     // LAN discovery + update check.
     lan_hosts: Vec<(String, String)>,
     update_status: Option<String>,
+
+    // Custom (imported) theme.
+    custom_theme: Option<Custom>,
+    use_custom: bool,
+
+    // System tray.
+    _tray: Option<TrayIcon>,
+    tray_rx: Option<Receiver<TrayAction>>,
+    quitting: bool,
 }
 
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let data_dir = Engine::default_data_dir();
-        let theme = crate::theme::load(&data_dir);
-        cc.egui_ctx.set_visuals(theme.visuals());
+        let loaded = crate::theme::load(&data_dir);
+        let visuals = match (loaded.use_custom, &loaded.custom) {
+            (true, Some(c)) => c.visuals(),
+            _ => loaded.theme.visuals(),
+        };
+        cc.egui_ctx.set_visuals(visuals);
         let handle = worker::spawn(cc.egui_ctx.clone());
+        let (tray, tray_rx) = match tray::setup(cc.egui_ctx.clone()) {
+            Some((t, r)) => (Some(t), Some(r)),
+            None => (None, None),
+        };
         Self {
             handle,
             data_dir,
@@ -126,7 +145,7 @@ impl App {
             remote: None,
             storage: None,
             conflicts: std::collections::HashMap::new(),
-            theme,
+            theme: loaded.theme,
             theme_dirty: false,
             search: String::new(),
             busy: 0,
@@ -155,6 +174,11 @@ impl App {
             plugins: None,
             lan_hosts: Vec::new(),
             update_status: None,
+            custom_theme: loaded.custom,
+            use_custom: loaded.use_custom,
+            _tray: tray,
+            tray_rx,
+            quitting: false,
         }
     }
 
@@ -535,12 +559,47 @@ impl App {
                 ui.heading("Appearance");
                 ui.horizontal_wrapped(|ui| {
                     for t in Theme::ALL {
-                        if ui.selectable_label(self.theme == t, t.name()).clicked() {
+                        if ui
+                            .selectable_label(!self.use_custom && self.theme == t, t.name())
+                            .clicked()
+                        {
                             self.theme = t;
+                            self.use_custom = false;
+                            self.theme_dirty = true;
+                        }
+                    }
+                    if let Some(c) = &self.custom_theme {
+                        if ui
+                            .selectable_label(self.use_custom, c.name.as_str())
+                            .clicked()
+                        {
+                            self.use_custom = true;
                             self.theme_dirty = true;
                         }
                     }
                 });
+                if ui.button("Import theme (JSON)…").clicked() {
+                    if let Some(p) = rfd::FileDialog::new()
+                        .add_filter("JSON", &["json"])
+                        .pick_file()
+                    {
+                        match std::fs::read_to_string(&p)
+                            .ok()
+                            .and_then(|s| crate::theme::parse_custom(&s))
+                        {
+                            Some(c) => {
+                                self.custom_theme = Some(c);
+                                self.use_custom = true;
+                                self.theme_dirty = true;
+                            }
+                            None => self.toasts.push(Toast {
+                                msg: "Couldn't parse that theme file.".to_string(),
+                                kind: ToastKind::Error,
+                                at: Instant::now(),
+                            }),
+                        }
+                    }
+                }
 
                 ui.separator();
                 ui.heading("Sync");
@@ -1084,6 +1143,30 @@ impl eframe::App for App {
 
         let tx = self.handle.tx();
 
+        // Tray menu actions.
+        if let Some(rx) = &self.tray_rx {
+            while let Ok(action) = rx.try_recv() {
+                match action {
+                    TrayAction::Open => {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                    }
+                    TrayAction::SyncAll => {
+                        let _ = tx.send(Cmd::SyncAll);
+                    }
+                    TrayAction::Quit => {
+                        self.quitting = true;
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                }
+            }
+        }
+        // Close-to-tray: hide instead of quitting when a tray is present.
+        if self._tray.is_some() && !self.quitting && ctx.input(|i| i.viewport().close_requested()) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        }
+
         if self.locked && !self.opened {
             self.render_unlock(ctx, &tx);
             self.render_toasts(ctx);
@@ -1111,8 +1194,17 @@ impl eframe::App for App {
         self.render_toasts(ctx);
 
         if self.theme_dirty {
-            ctx.set_visuals(self.theme.visuals());
-            crate::theme::save(&self.data_dir, self.theme);
+            let visuals = match (self.use_custom, &self.custom_theme) {
+                (true, Some(c)) => c.visuals(),
+                _ => self.theme.visuals(),
+            };
+            ctx.set_visuals(visuals);
+            crate::theme::save(
+                &self.data_dir,
+                self.theme,
+                &self.custom_theme,
+                self.use_custom,
+            );
             self.theme_dirty = false;
         }
     }

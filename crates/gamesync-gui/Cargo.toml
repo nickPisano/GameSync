@@ -17,3 +17,5 @@ serde_json = { workspace = true }
 # Native OS file/folder dialogs (no webview). Uses GTK on Linux, Cocoa on
 # macOS, the native dialog on Windows.
 rfd = "0.15"
+# System tray icon + menu (close-to-tray).
+tray-icon = "0.19"

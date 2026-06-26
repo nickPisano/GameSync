@@ -84,6 +84,7 @@ pub enum Cmd {
     SetCommandsAllowed(bool),
     DiscoverLan,
     CheckUpdate,
+    SyncAll,
     Tick,
 }
 
@@ -554,6 +555,23 @@ fn handle(cmd: Cmd, engine: &mut Option<Engine>, data_dir: &Path, emit: &impl Fn
             Err(err) => emit(Evt::Error(err.to_string())),
         },
         Cmd::CheckUpdate => emit(Evt::Update(check_update())),
+        Cmd::SyncAll => match e.auto_sync_pass() {
+            Ok(rep) => {
+                emit(Evt::Info(format!(
+                    "Synced all: {} backed up · {} pushed · {} pulled.",
+                    rep.backed_up, rep.pushed, rep.pulled
+                )));
+                for c in rep.conflicts {
+                    emit(Evt::Conflict {
+                        game: c.game_id,
+                        local: c.local,
+                        remote: c.remote,
+                    });
+                }
+                relist(e, emit);
+            }
+            Err(err) => emit(Evt::Error(err.to_string())),
+        },
         Cmd::Tick => unreachable!("handled in the run loop"),
     }
     emit(Evt::Busy(false));

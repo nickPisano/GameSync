@@ -10,6 +10,7 @@
 
 mod app;
 mod theme;
+mod tray;
 mod util;
 mod worker;
 
