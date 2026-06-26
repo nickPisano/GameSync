@@ -10,7 +10,7 @@ use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Color32, RichText};
-use gamesync_core::{AutoSyncSettings, Engine, Game, Snapshot, StorageReport};
+use gamesync_core::{AutoSyncSettings, Diff, Engine, Game, SaveFile, Snapshot, StorageReport};
 
 use crate::theme::Theme;
 use crate::util::{human_size, humanize_ago, short};
@@ -69,6 +69,20 @@ pub struct App {
     rename_buf: String,
     remote_buf: String,
     confirm_remove: Option<String>,
+
+    // Per-game settings editor.
+    gs_game: Option<String>,
+    gs_extra: Vec<String>,
+    gs_exe: String,
+
+    // Files view.
+    files_game: Option<String>,
+    files_for: Option<String>,
+    files: Vec<SaveFile>,
+
+    // Diff viewer.
+    diff_result: Option<Diff>,
+    show_diff: bool,
 }
 
 impl App {
@@ -107,6 +121,14 @@ impl App {
             rename_buf: String::new(),
             remote_buf: String::new(),
             confirm_remove: None,
+            gs_game: None,
+            gs_extra: Vec::new(),
+            gs_exe: String::new(),
+            files_game: None,
+            files_for: None,
+            files: Vec::new(),
+            diff_result: None,
+            show_diff: false,
         }
     }
 
@@ -140,6 +162,14 @@ impl App {
                     self.versions = versions;
                 }
                 Evt::Storage(s) => self.storage = Some(s),
+                Evt::Files { game, files } => {
+                    self.files_for = Some(game);
+                    self.files = files;
+                }
+                Evt::Diff(d) => {
+                    self.diff_result = Some(d);
+                    self.show_diff = true;
+                }
                 Evt::Conflict {
                     game,
                     local,
@@ -315,9 +345,7 @@ impl App {
             // Header: name (or rename editor) + actions.
             ui.horizontal(|ui| {
                 if self.renaming.as_deref() == Some(g.id.as_str()) {
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.rename_buf).desired_width(240.0),
-                    );
+                    ui.add(egui::TextEdit::singleline(&mut self.rename_buf).desired_width(240.0));
                     if ui.button("Save").clicked() {
                         let name = self.rename_buf.trim().to_string();
                         if !name.is_empty() {
@@ -333,6 +361,22 @@ impl App {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.button("Remove").clicked() {
                             self.confirm_remove = Some(g.id.clone());
+                        }
+                        if ui.button("Settings").clicked() {
+                            self.gs_game = Some(g.id.clone());
+                            self.gs_extra =
+                                g.extra_roots.iter().map(|p| p.display().to_string()).collect();
+                            self.gs_exe = g
+                                .install_dir
+                                .as_ref()
+                                .map(|p| p.display().to_string())
+                                .unwrap_or_default();
+                        }
+                        if ui.button("Files").clicked() {
+                            self.files_game = Some(g.id.clone());
+                            self.files.clear();
+                            self.files_for = None;
+                            let _ = tx.send(Cmd::ListFiles(g.id.clone()));
                         }
                         if ui.button("Rename").clicked() {
                             self.renaming = Some(g.id.clone());
@@ -397,7 +441,10 @@ impl App {
 
             ui.separator();
             if self.versions_for.as_deref() == Some(g.id.as_str()) {
-                ui.label(format!("History — {} version(s), newest first", self.versions.len()));
+                ui.label(format!(
+                    "History — {} version(s), newest first",
+                    self.versions.len()
+                ));
                 ui.add_space(4.0);
                 egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
                     for v in &self.versions {
@@ -415,6 +462,15 @@ impl App {
                                     game: g.id.clone(),
                                     version: v.version_id.clone(),
                                 });
+                            }
+                            if let Some(parent) = &v.parent {
+                                if ui.small_button("Diff").clicked() {
+                                    let _ = tx.send(Cmd::Diff {
+                                        game: g.id.clone(),
+                                        from: parent.clone(),
+                                        to: v.version_id.clone(),
+                                    });
+                                }
                             }
                         });
                     }
@@ -482,6 +538,11 @@ impl App {
                             .desired_width(280.0)
                             .hint_text("/path/to/Dropbox/GameSync"),
                     );
+                    if ui.button("Browse…").clicked() {
+                        if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                            self.remote_buf = p.display().to_string();
+                        }
+                    }
                     if ui.button("Save").clicked() {
                         let _ = tx.send(Cmd::SetRemote(self.remote_buf.trim().to_string()));
                     }
@@ -538,6 +599,11 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.label("Folder");
                     ui.add(egui::TextEdit::singleline(&mut self.add_path).desired_width(240.0));
+                    if ui.button("Browse…").clicked() {
+                        if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                            self.add_path = p.display().to_string();
+                        }
+                    }
                 });
                 ui.add_space(6.0);
                 if ui.button("Add").clicked() {
@@ -554,10 +620,194 @@ impl App {
                     }
                 }
             });
-        // If the window was closed via its X, `open` is false.
         if !open {
             self.show_add = false;
         }
+    }
+
+    fn render_game_settings(&mut self, ctx: &egui::Context, tx: &Sender<Cmd>) {
+        let Some(id) = self.gs_game.clone() else {
+            return;
+        };
+        let mut open = true;
+        egui::Window::new("Game settings")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .default_width(500.0)
+            .show(ctx, |ui| {
+                ui.heading("Extra backup folders");
+                ui.label(
+                    RichText::new("Backed up and restored together with the save folder.").weak(),
+                );
+                let mut remove_idx = None;
+                for (i, r) in self.gs_extra.iter().enumerate() {
+                    ui.horizontal(|ui| {
+                        if ui.small_button("✕").clicked() {
+                            remove_idx = Some(i);
+                        }
+                        ui.label(r.as_str());
+                    });
+                }
+                if let Some(i) = remove_idx {
+                    self.gs_extra.remove(i);
+                }
+                ui.horizontal(|ui| {
+                    if ui.button("Add folder…").clicked() {
+                        if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                            self.gs_extra.push(p.display().to_string());
+                        }
+                    }
+                    if ui.button("Save extra folders").clicked() {
+                        let roots: Vec<PathBuf> = self
+                            .gs_extra
+                            .iter()
+                            .map(|s| PathBuf::from(s.as_str()))
+                            .collect();
+                        let _ = tx.send(Cmd::SetExtraRoots {
+                            id: id.clone(),
+                            roots,
+                        });
+                    }
+                });
+
+                ui.separator();
+                ui.heading("Close-detection location");
+                ui.label(
+                    RichText::new(
+                        "The game's install folder; GameSync watches it to back up automatically \
+                         a few seconds after the game exits.",
+                    )
+                    .weak(),
+                );
+                ui.horizontal(|ui| {
+                    ui.add(egui::TextEdit::singleline(&mut self.gs_exe).desired_width(300.0));
+                    if ui.button("Browse…").clicked() {
+                        if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                            self.gs_exe = p.display().to_string();
+                        }
+                    }
+                });
+                if ui.button("Save location").clicked() {
+                    let path = if self.gs_exe.trim().is_empty() {
+                        None
+                    } else {
+                        Some(PathBuf::from(self.gs_exe.trim()))
+                    };
+                    let _ = tx.send(Cmd::SetGameExe {
+                        id: id.clone(),
+                        path,
+                    });
+                }
+
+                ui.separator();
+                ui.heading("Redirect save folder");
+                ui.label(
+                    RichText::new(
+                        "Move this game's saves into a synced folder (e.g. OneDrive) and leave a \
+                         link behind, so they sync even when GameSync isn't running.",
+                    )
+                    .weak(),
+                );
+                if ui.button("Choose target & redirect…").clicked() {
+                    if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                        let _ = tx.send(Cmd::Redirect {
+                            id: id.clone(),
+                            target: p,
+                        });
+                    }
+                }
+            });
+        if !open {
+            self.gs_game = None;
+        }
+    }
+
+    fn render_files(&mut self, ctx: &egui::Context) {
+        let Some(game) = self.files_game.clone() else {
+            return;
+        };
+        let mut open = true;
+        egui::Window::new("Files")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .default_width(580.0)
+            .show(ctx, |ui| {
+                if self.files_for.as_deref() != Some(game.as_str()) {
+                    ui.label("Loading…");
+                } else if self.files.is_empty() {
+                    ui.label("No files in the save folder.");
+                } else {
+                    egui::ScrollArea::vertical()
+                        .auto_shrink(false)
+                        .max_height(380.0)
+                        .show(ui, |ui| {
+                            for f in &self.files {
+                                ui.horizontal(|ui| {
+                                    if ui.small_button("Reveal").clicked() {
+                                        reveal(&f.abs_path);
+                                    }
+                                    ui.label(human_size(f.size));
+                                    ui.monospace(f.rel_path.as_str());
+                                });
+                            }
+                        });
+                }
+            });
+        if !open {
+            self.files_game = None;
+        }
+    }
+
+    fn render_diff(&mut self, ctx: &egui::Context) {
+        if !self.show_diff {
+            return;
+        }
+        let mut open = self.show_diff;
+        egui::Window::new("Changes")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .default_width(500.0)
+            .show(ctx, |ui| {
+                if let Some(d) = &self.diff_result {
+                    if d.is_empty() {
+                        ui.label(format!("No changes ({} files identical).", d.unchanged));
+                    } else {
+                        ui.label(format!(
+                            "{} changed · {} unchanged",
+                            d.changed_count(),
+                            d.unchanged
+                        ));
+                        ui.add_space(4.0);
+                        egui::ScrollArea::vertical()
+                            .auto_shrink(false)
+                            .max_height(380.0)
+                            .show(ui, |ui| {
+                                for p in &d.added {
+                                    ui.colored_label(
+                                        Color32::from_rgb(120, 200, 120),
+                                        format!("+ {p}"),
+                                    );
+                                }
+                                for p in &d.modified {
+                                    ui.colored_label(
+                                        Color32::from_rgb(210, 180, 90),
+                                        format!("~ {p}"),
+                                    );
+                                }
+                                for p in &d.removed {
+                                    ui.colored_label(
+                                        Color32::from_rgb(225, 110, 110),
+                                        format!("- {p}"),
+                                    );
+                                }
+                            });
+                    }
+                }
+            });
+        self.show_diff = open;
     }
 
     fn render_confirm_remove(&mut self, ctx: &egui::Context, tx: &Sender<Cmd>) {
@@ -619,6 +869,27 @@ impl App {
     }
 }
 
+/// Open the OS file manager at `path` (revealing the file where supported).
+fn reveal(path: &str) {
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open")
+        .arg("-R")
+        .arg(path)
+        .spawn();
+    #[cfg(target_os = "windows")]
+    let _ = std::process::Command::new("explorer")
+        .arg(format!("/select,{}", path.replace('/', "\\")))
+        .spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let dir = std::path::Path::new(path)
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        let _ = std::process::Command::new("xdg-open").arg(dir).spawn();
+    }
+}
+
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.drain_events();
@@ -639,6 +910,9 @@ impl eframe::App for App {
         self.render_central(ctx, &tx);
         self.render_settings(ctx, &tx);
         self.render_add(ctx, &tx);
+        self.render_game_settings(ctx, &tx);
+        self.render_files(ctx);
+        self.render_diff(ctx);
         self.render_confirm_remove(ctx, &tx);
         self.render_toasts(ctx);
 

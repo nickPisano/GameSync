@@ -12,8 +12,8 @@ use std::thread;
 
 use eframe::egui;
 use gamesync_core::{
-    AutoSyncSettings, BackupOptions, ConflictChoice, Engine, Game, Snapshot, StorageReport,
-    SyncOutcome,
+    AutoSyncSettings, BackupOptions, ConflictChoice, Diff, Engine, Game, SaveFile, Snapshot,
+    StorageReport, SyncOutcome,
 };
 
 use crate::util::short;
@@ -26,19 +26,52 @@ pub enum Cmd {
     Versions(String),
     Backup(String),
     RestoreLatest(String),
-    Restore { game: String, version: String },
+    Restore {
+        game: String,
+        version: String,
+    },
     Verify,
-    AddManual { name: String, path: PathBuf },
-    ToggleSync { id: String, enabled: bool },
-    Rename { id: String, name: String },
+    AddManual {
+        name: String,
+        path: PathBuf,
+    },
+    ToggleSync {
+        id: String,
+        enabled: bool,
+    },
+    Rename {
+        id: String,
+        name: String,
+    },
     Remove(String),
     SetCompression(bool),
     SetAutoSync(AutoSyncSettings),
     SetRemote(String),
     Sync(String),
-    Resolve { id: String, keep_local: bool },
+    Resolve {
+        id: String,
+        keep_local: bool,
+    },
     Fork(String),
     FetchStorage,
+    SetExtraRoots {
+        id: String,
+        roots: Vec<PathBuf>,
+    },
+    SetGameExe {
+        id: String,
+        path: Option<PathBuf>,
+    },
+    Redirect {
+        id: String,
+        target: PathBuf,
+    },
+    ListFiles(String),
+    Diff {
+        game: String,
+        from: String,
+        to: String,
+    },
 }
 
 /// Store-wide settings snapshot, refreshed whenever they change.
@@ -60,6 +93,11 @@ pub enum Evt {
         versions: Vec<Snapshot>,
     },
     Storage(StorageReport),
+    Files {
+        game: String,
+        files: Vec<SaveFile>,
+    },
+    Diff(Diff),
     Conflict {
         game: String,
         local: String,
@@ -316,6 +354,36 @@ fn handle(cmd: Cmd, engine: &mut Option<Engine>, data_dir: &Path, emit: &impl Fn
         },
         Cmd::FetchStorage => match e.storage_report() {
             Ok(r) => emit(Evt::Storage(r)),
+            Err(err) => emit(Evt::Error(err.to_string())),
+        },
+        Cmd::SetExtraRoots { id, roots } => {
+            note(e.set_extra_roots(&id, roots), "Extra folders saved.", emit);
+            relist(e, emit);
+        }
+        Cmd::SetGameExe { id, path } => {
+            note(
+                e.set_game_exe(&id, path),
+                "Close-detection location saved.",
+                emit,
+            );
+            relist(e, emit);
+        }
+        Cmd::Redirect { id, target } => match e.redirect_save_folder(&id, target) {
+            Ok(r) => {
+                emit(Evt::Info(format!(
+                    "Redirected. Saves now live at {}; the original was kept at {}.",
+                    r.linked_target, r.original_backup
+                )));
+                relist(e, emit);
+            }
+            Err(err) => emit(Evt::Error(err.to_string())),
+        },
+        Cmd::ListFiles(id) => match e.list_save_files(&id) {
+            Ok(files) => emit(Evt::Files { game: id, files }),
+            Err(err) => emit(Evt::Error(err.to_string())),
+        },
+        Cmd::Diff { game, from, to } => match e.diff(&game, &from, &to) {
+            Ok(d) => emit(Evt::Diff(d)),
             Err(err) => emit(Evt::Error(err.to_string())),
         },
     }
