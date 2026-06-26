@@ -173,7 +173,8 @@ fn meta(engine: &Engine, data_dir: &Path) -> Meta {
             .remote_path()
             .ok()
             .flatten()
-            .map(|p| p.display().to_string()),
+            .map(|p| p.display().to_string())
+            .filter(|s| !s.trim().is_empty()),
         setup_complete: engine.is_setup_complete().unwrap_or(true),
     }
 }

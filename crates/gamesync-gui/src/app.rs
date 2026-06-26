@@ -330,7 +330,14 @@ impl App {
                     if ui.button("Scan").clicked() {
                         let _ = tx.send(Cmd::Scan);
                     }
-                    if primary_button(ui, "Sync all", accent).clicked() {
+                    if ui
+                        .add_enabled(
+                            self.remote.is_some(),
+                            egui::Button::new(RichText::new("Sync all").color(Color32::WHITE))
+                                .fill(accent),
+                        )
+                        .clicked()
+                    {
                         let _ = tx.send(Cmd::SyncAll);
                     }
                 });
@@ -345,28 +352,30 @@ impl App {
             ui.add_space(5.0);
             ui.horizontal(|ui| {
                 ui.label(RichText::new("REMOTE").small().weak());
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.remote_buf)
-                        .desired_width(380.0)
-                        .hint_text("Path to a shared/cloud folder (e.g. ~/Dropbox/GameSync)"),
-                );
-                if ui.button("Browse…").clicked() {
-                    if let Some(p) = rfd::FileDialog::new().pick_folder() {
-                        self.remote_buf = p.display().to_string();
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(
+                        RichText::new(if self.remote.is_some() {
+                            "set"
+                        } else {
+                            "not set"
+                        })
+                        .small()
+                        .weak(),
+                    );
+                    if primary_button(ui, "Save", accent).clicked() {
+                        let _ = tx.send(Cmd::SetRemote(self.remote_buf.trim().to_string()));
                     }
-                }
-                if primary_button(ui, "Save", accent).clicked() {
-                    let _ = tx.send(Cmd::SetRemote(self.remote_buf.trim().to_string()));
-                }
-                ui.label(
-                    RichText::new(if self.remote.is_some() {
-                        "set"
-                    } else {
-                        "not set"
-                    })
-                    .small()
-                    .weak(),
-                );
+                    if ui.button("Browse…").clicked() {
+                        if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                            self.remote_buf = p.display().to_string();
+                        }
+                    }
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.remote_buf)
+                            .desired_width(f32::INFINITY)
+                            .hint_text("Path to a shared/cloud folder (e.g. ~/Dropbox/GameSync)"),
+                    );
+                });
             });
             ui.add_space(5.0);
         });
@@ -440,7 +449,7 @@ impl App {
                         let (count, last) = self.summaries.get(&g.id).copied().unwrap_or((0, None));
                         egui::Frame::group(ui.style())
                             .fill(card_fill)
-                            .inner_margin(egui::Margin::same(12))
+                            .inner_margin(egui::Margin::same(14))
                             .show(ui, |ui| {
                                 ui.set_min_width(ui.available_width());
                                 let full = ui.available_width();
@@ -479,7 +488,7 @@ impl App {
                                             if self.auto_sync.backup_on_exit {
                                                 ui.label(
                                                     RichText::new(
-                                                        "Backs up automatically when it closes",
+                                                        "backs up automatically when it closes",
                                                     )
                                                     .weak()
                                                     .small(),
