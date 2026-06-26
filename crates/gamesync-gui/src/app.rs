@@ -97,6 +97,10 @@ pub struct App {
     // Plugins.
     show_plugins: bool,
     plugins: Option<PluginList>,
+
+    // LAN discovery + update check.
+    lan_hosts: Vec<(String, String)>,
+    update_status: Option<String>,
 }
 
 impl App {
@@ -149,6 +153,8 @@ impl App {
             recovery_key: None,
             show_plugins: false,
             plugins: None,
+            lan_hosts: Vec::new(),
+            update_status: None,
         }
     }
 
@@ -192,6 +198,13 @@ impl App {
                 }
                 Evt::RecoveryKey(k) => self.recovery_key = Some(k),
                 Evt::Plugins(p) => self.plugins = Some(p),
+                Evt::LanHosts(h) => self.lan_hosts = h,
+                Evt::Update(opt) => {
+                    self.update_status = Some(match opt {
+                        Some(v) => format!("Update available: v{v}"),
+                        None => "You're on the latest version.".to_string(),
+                    })
+                }
                 Evt::Conflict {
                     game,
                     local,
@@ -574,6 +587,22 @@ impl App {
                         let _ = tx.send(Cmd::SetRemote(self.remote_buf.trim().to_string()));
                     }
                 });
+                ui.horizontal(|ui| {
+                    if ui.button("Find LAN hosts").clicked() {
+                        let _ = tx.send(Cmd::DiscoverLan);
+                    }
+                    if !self.lan_hosts.is_empty() {
+                        ui.label(RichText::new(format!("{} found", self.lan_hosts.len())).weak());
+                    }
+                });
+                for (name, endpoint) in &self.lan_hosts {
+                    ui.horizontal(|ui| {
+                        if ui.small_button("Use").clicked() {
+                            self.remote_buf = format!("lan:@{endpoint}");
+                        }
+                        ui.label(format!("{name} — {endpoint}"));
+                    });
+                }
 
                 ui.separator();
                 ui.heading("Storage");
@@ -620,6 +649,15 @@ impl App {
                             self.enc_pass.clear();
                         }
                     });
+                }
+
+                ui.separator();
+                ui.heading("Updates");
+                if ui.button("Check for updates").clicked() {
+                    let _ = tx.send(Cmd::CheckUpdate);
+                }
+                if let Some(s) = &self.update_status {
+                    ui.label(s.as_str());
                 }
             });
         self.show_settings = open;

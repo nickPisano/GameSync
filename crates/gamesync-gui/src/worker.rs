@@ -6,9 +6,11 @@
 //! channels, keeping the egui thread responsive. The worker calls
 //! `ctx.request_repaint()` after each event so the UI wakes to consume it.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use eframe::egui;
 use gamesync_core::{
@@ -80,6 +82,9 @@ pub enum Cmd {
         enabled: bool,
     },
     SetCommandsAllowed(bool),
+    DiscoverLan,
+    CheckUpdate,
+    Tick,
 }
 
 /// Store-wide settings snapshot, refreshed whenever they change.
@@ -109,6 +114,8 @@ pub enum Evt {
     Diff(Diff),
     RecoveryKey(String),
     Plugins(PluginList),
+    LanHosts(Vec<(String, String)>),
+    Update(Option<String>),
     Conflict {
         game: String,
         local: String,
@@ -140,6 +147,14 @@ pub fn spawn(ctx: egui::Context) -> EngineHandle {
         ctx.request_repaint();
     };
     thread::spawn(move || run(cmd_rx, emit));
+    // Background ticker drives auto-sync and auto-backup-on-exit.
+    let tick_tx = cmd_tx.clone();
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_secs(30));
+        if tick_tx.send(Cmd::Tick).is_err() {
+            break;
+        }
+    });
     EngineHandle {
         tx: cmd_tx,
         rx: evt_rx,
@@ -178,7 +193,13 @@ fn run(rx: Receiver<Cmd>, emit: impl Fn(Evt)) {
         }
     }
 
+    let mut prev_running: HashSet<String> = HashSet::new();
+    let mut last_pass = Instant::now();
     while let Ok(cmd) = rx.recv() {
+        if matches!(cmd, Cmd::Tick) {
+            tick(&engine, &mut prev_running, &mut last_pass, &emit);
+            continue;
+        }
         handle(cmd, &mut engine, &data_dir, &emit);
     }
 }
@@ -204,6 +225,88 @@ fn emit_plugins(e: &Engine, emit: &impl Fn(Evt)) {
     match e.list_plugins() {
         Ok(pl) => emit(Evt::Plugins(pl)),
         Err(err) => emit(Evt::Error(err.to_string())),
+    }
+}
+
+/// One background tick: auto-backup games that just exited, and run a periodic
+/// auto-sync pass when it's due. Runs silently except for results worth a toast.
+fn tick(
+    engine: &Option<Engine>,
+    prev_running: &mut HashSet<String>,
+    last_pass: &mut Instant,
+    emit: &impl Fn(Evt),
+) {
+    let Some(e) = engine.as_ref() else {
+        return;
+    };
+    let settings = e.auto_sync_settings().unwrap_or_default();
+
+    if let Ok(running) = e.running_game_ids() {
+        let now: HashSet<String> = running.into_iter().collect();
+        if settings.backup_on_exit {
+            for id in prev_running.difference(&now) {
+                if let Ok(Some(s)) = e.backup_if_changed(id) {
+                    emit(Evt::Info(format!(
+                        "Auto-backed up {} file(s) for {id} on exit.",
+                        s.file_count()
+                    )));
+                }
+            }
+        }
+        *prev_running = now;
+    }
+
+    if settings.enabled {
+        let interval = settings.interval_min.saturating_mul(60).max(60);
+        if last_pass.elapsed().as_secs() >= interval {
+            *last_pass = Instant::now();
+            match e.auto_sync_pass() {
+                Ok(rep) => {
+                    if rep.backed_up + rep.pushed + rep.pulled > 0 {
+                        emit(Evt::Info(format!(
+                            "Auto-sync: {} backed up · {} pushed · {} pulled.",
+                            rep.backed_up, rep.pushed, rep.pulled
+                        )));
+                    }
+                    for c in rep.conflicts {
+                        emit(Evt::Conflict {
+                            game: c.game_id,
+                            local: c.local,
+                            remote: c.remote,
+                        });
+                    }
+                    if let Ok(g) = e.list_games() {
+                        emit(Evt::Games(g));
+                    }
+                }
+                Err(err) => emit(Evt::Error(format!("Auto-sync failed: {err}"))),
+            }
+        }
+    }
+}
+
+/// Ask GitHub for the latest release tag; `Some(version)` if newer than this build.
+fn check_update() -> Option<String> {
+    let out = std::process::Command::new("curl")
+        .args([
+            "-s",
+            "-H",
+            "User-Agent: GameSync",
+            "https://api.github.com/repos/nickPisano/GameSync/releases/latest",
+        ])
+        .output()
+        .ok()?;
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
+    let tag = v
+        .get("tag_name")?
+        .as_str()?
+        .trim_start_matches('v')
+        .to_string();
+    let current = env!("CARGO_PKG_VERSION");
+    if !tag.is_empty() && tag != current {
+        Some(tag)
+    } else {
+        None
     }
 }
 
@@ -438,6 +541,20 @@ fn handle(cmd: Cmd, engine: &mut Option<Engine>, data_dir: &Path, emit: &impl Fn
             note(e.set_commands_allowed(allowed), "", emit);
             emit_plugins(e, emit);
         }
+        Cmd::DiscoverLan => match Engine::discover_lan(2000) {
+            Ok(hosts) => emit(Evt::LanHosts(
+                hosts
+                    .into_iter()
+                    .map(|h| {
+                        let endpoint = h.endpoint();
+                        (h.name, endpoint)
+                    })
+                    .collect(),
+            )),
+            Err(err) => emit(Evt::Error(err.to_string())),
+        },
+        Cmd::CheckUpdate => emit(Evt::Update(check_update())),
+        Cmd::Tick => unreachable!("handled in the run loop"),
     }
     emit(Evt::Busy(false));
 }
