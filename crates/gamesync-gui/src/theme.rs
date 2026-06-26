@@ -13,9 +13,31 @@ use serde::{Deserialize, Serialize};
 /// Global spacing/padding tweaks (not part of `Visuals`, so they survive theme
 /// switches). Call once at startup.
 pub fn apply_style(ctx: &egui::Context) {
+    use egui::{FontFamily, FontId, TextStyle};
     let mut style = (*ctx.style()).clone();
-    style.spacing.item_spacing = egui::vec2(8.0, 7.0);
-    style.spacing.button_padding = egui::vec2(10.0, 6.0);
+    // Match the web build's type scale (body 14px, meta/small 12px, buttons 13px).
+    style.text_styles = [
+        (
+            TextStyle::Heading,
+            FontId::new(18.0, FontFamily::Proportional),
+        ),
+        (TextStyle::Body, FontId::new(14.0, FontFamily::Proportional)),
+        (
+            TextStyle::Button,
+            FontId::new(13.0, FontFamily::Proportional),
+        ),
+        (
+            TextStyle::Small,
+            FontId::new(12.0, FontFamily::Proportional),
+        ),
+        (
+            TextStyle::Monospace,
+            FontId::new(13.0, FontFamily::Monospace),
+        ),
+    ]
+    .into();
+    style.spacing.item_spacing = egui::vec2(8.0, 6.0);
+    style.spacing.button_padding = egui::vec2(12.0, 6.0);
     ctx.set_style(style);
 }
 

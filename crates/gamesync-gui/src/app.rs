@@ -522,7 +522,7 @@ impl App {
                         let (count, last) = self.summaries.get(&g.id).copied().unwrap_or((0, None));
                         egui::Frame::group(ui.style())
                             .fill(card_fill)
-                            .inner_margin(egui::Margin::same(14))
+                            .inner_margin(egui::Margin::same(16))
                             .show(ui, |ui| {
                                 ui.set_min_width(ui.available_width());
                                 let full = ui.available_width();
@@ -538,7 +538,7 @@ impl App {
                                             ui.horizontal(|ui| {
                                                 ui.label(
                                                     RichText::new(g.name.as_str())
-                                                        .size(16.0)
+                                                        .size(15.0)
                                                         .strong(),
                                                 );
                                                 badge(ui, g.platform.as_str());
