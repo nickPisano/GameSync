@@ -487,11 +487,16 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("Games ({})", self.games.len())).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.add(
+                        // Force the dropdown + filter to the same height. The
+                        // combo button height is driven by button_padding, so cap
+                        // that here and size the text field to match exactly.
+                        ui.spacing_mut().interact_size.y = 30.0;
+                        ui.spacing_mut().button_padding.y = 6.0;
+                        ui.add_sized(
+                            egui::vec2(176.0, 30.0),
                             egui::TextEdit::singleline(&mut self.search)
                                 .hint_text("Filter…")
-                                .desired_width(176.0)
-                                .margin(egui::Margin::symmetric(10, 8)),
+                                .vertical_align(egui::Align::Center),
                         );
                         egui::ComboBox::from_id_salt("sort")
                             .selected_text(self.sort_key.label())
