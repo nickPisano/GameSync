@@ -10,7 +10,9 @@ use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Color32, RichText};
-use gamesync_core::{AutoSyncSettings, Diff, Engine, Game, SaveFile, Snapshot, StorageReport};
+use gamesync_core::{
+    AutoSyncSettings, Diff, Engine, Game, PluginList, SaveFile, Snapshot, StorageReport,
+};
 
 use crate::theme::Theme;
 use crate::util::{human_size, humanize_ago, short};
@@ -83,6 +85,18 @@ pub struct App {
     // Diff viewer.
     diff_result: Option<Diff>,
     show_diff: bool,
+
+    // First-run wizard.
+    setup_complete: bool,
+    wizard_dismissed: bool,
+
+    // Enable-encryption flow.
+    enc_pass: String,
+    recovery_key: Option<String>,
+
+    // Plugins.
+    show_plugins: bool,
+    plugins: Option<PluginList>,
 }
 
 impl App {
@@ -129,6 +143,12 @@ impl App {
             files: Vec::new(),
             diff_result: None,
             show_diff: false,
+            setup_complete: true,
+            wizard_dismissed: false,
+            enc_pass: String::new(),
+            recovery_key: None,
+            show_plugins: false,
+            plugins: None,
         }
     }
 
@@ -170,6 +190,8 @@ impl App {
                     self.diff_result = Some(d);
                     self.show_diff = true;
                 }
+                Evt::RecoveryKey(k) => self.recovery_key = Some(k),
+                Evt::Plugins(p) => self.plugins = Some(p),
                 Evt::Conflict {
                     game,
                     local,
@@ -204,6 +226,7 @@ impl App {
     }
 
     fn apply_meta(&mut self, m: Meta) {
+        self.setup_complete = m.setup_complete;
         self.encrypted = m.encrypted;
         self.auto_sync = m.auto_sync;
         self.compression = m.compression;
@@ -246,6 +269,10 @@ impl App {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("⚙ Settings").clicked() {
                         self.show_settings = true;
+                    }
+                    if ui.button("Plugins").clicked() {
+                        self.show_plugins = true;
+                        let _ = tx.send(Cmd::ListPlugins);
                     }
                     if ui.button("Verify").clicked() {
                         let _ = tx.send(Cmd::Verify);
@@ -571,11 +598,29 @@ impl App {
 
                 ui.separator();
                 ui.heading("Encryption");
-                ui.label(if self.encrypted {
-                    "Enabled (zero-knowledge)."
+                if self.encrypted {
+                    ui.label("Enabled (zero-knowledge).");
                 } else {
-                    "Disabled. Enable on a fresh store with the CLI: gamesync encrypt-init."
-                });
+                    ui.label(
+                        RichText::new(
+                            "Encrypt all stored saves. Only possible on an empty store; you'll \
+                             get a one-time recovery key.",
+                        )
+                        .weak(),
+                    );
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.enc_pass)
+                                .password(true)
+                                .hint_text("Passphrase (min 8 chars)")
+                                .desired_width(240.0),
+                        );
+                        if ui.button("Enable encryption").clicked() && self.enc_pass.len() >= 8 {
+                            let _ = tx.send(Cmd::EnableEncryption(self.enc_pass.clone()));
+                            self.enc_pass.clear();
+                        }
+                    });
+                }
             });
         self.show_settings = open;
     }
@@ -867,6 +912,109 @@ impl App {
                 });
             });
     }
+
+    fn render_wizard(&mut self, ctx: &egui::Context, tx: &Sender<Cmd>) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.add_space(50.0);
+                ui.heading("Welcome to GameSync");
+                ui.add_space(8.0);
+                ui.label("Back up and sync your game saves safely. Let's find your games.");
+                ui.add_space(16.0);
+                if ui.button("Scan for installed games").clicked() {
+                    let _ = tx.send(Cmd::Scan);
+                }
+                ui.add_space(4.0);
+                ui.label(RichText::new("You can also add games manually with ➕ Add.").weak());
+                ui.add_space(20.0);
+                if ui.button("Get started").clicked() {
+                    let _ = tx.send(Cmd::MarkSetupComplete);
+                    self.wizard_dismissed = true;
+                }
+            });
+        });
+    }
+
+    fn render_plugins(&mut self, ctx: &egui::Context, tx: &Sender<Cmd>) {
+        if !self.show_plugins {
+            return;
+        }
+        let mut open = self.show_plugins;
+        egui::Window::new("Plugins")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .default_width(520.0)
+            .show(ctx, |ui| {
+                if let Some(pl) = &self.plugins {
+                    ui.label(RichText::new(format!("Folder: {}", pl.dir)).weak());
+                    let mut allowed = pl.commands_allowed;
+                    if ui
+                        .checkbox(
+                            &mut allowed,
+                            "Allow plugins to run shell commands (hooks & viewers)",
+                        )
+                        .changed()
+                    {
+                        let _ = tx.send(Cmd::SetCommandsAllowed(allowed));
+                    }
+                    ui.separator();
+                    if pl.plugins.is_empty() {
+                        ui.label("No plugins installed.");
+                    }
+                    for p in &pl.plugins {
+                        ui.horizontal(|ui| {
+                            let mut en = p.enabled;
+                            if ui.checkbox(&mut en, "").changed() {
+                                let _ = tx.send(Cmd::SetPluginEnabled {
+                                    id: p.id.clone(),
+                                    enabled: en,
+                                });
+                            }
+                            ui.strong(p.name.as_str());
+                            ui.label(
+                                RichText::new(format!(
+                                    "{} games · {} emulators · {} hooks · {} viewers",
+                                    p.games, p.emulators, p.hooks, p.viewers
+                                ))
+                                .weak(),
+                            );
+                        });
+                    }
+                    for (id, err) in &pl.errors {
+                        ui.colored_label(Color32::from_rgb(225, 110, 110), format!("{id}: {err}"));
+                    }
+                } else {
+                    ui.label("Loading…");
+                }
+            });
+        self.show_plugins = open;
+    }
+
+    fn render_recovery(&mut self, ctx: &egui::Context) {
+        let Some(key) = self.recovery_key.clone() else {
+            return;
+        };
+        let mut close = false;
+        egui::Window::new("Recovery key — write this down")
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.label(
+                    "Encryption is enabled. This recovery key can unlock your saves if you \
+                     forget the passphrase. It is shown only once:",
+                );
+                ui.add_space(8.0);
+                ui.monospace(key.as_str());
+                ui.add_space(8.0);
+                if ui.button("I've written it down").clicked() {
+                    close = true;
+                }
+            });
+        if close {
+            self.recovery_key = None;
+        }
+    }
 }
 
 /// Open the OS file manager at `path` (revealing the file where supported).
@@ -904,6 +1052,12 @@ impl eframe::App for App {
             return;
         }
 
+        if self.opened && !self.setup_complete && !self.wizard_dismissed {
+            self.render_wizard(ctx, &tx);
+            self.render_toasts(ctx);
+            return;
+        }
+
         self.render_topbar(ctx, &tx);
         self.render_status(ctx);
         self.render_sidebar(ctx, &tx);
@@ -913,6 +1067,8 @@ impl eframe::App for App {
         self.render_game_settings(ctx, &tx);
         self.render_files(ctx);
         self.render_diff(ctx);
+        self.render_plugins(ctx, &tx);
+        self.render_recovery(ctx);
         self.render_confirm_remove(ctx, &tx);
         self.render_toasts(ctx);
 

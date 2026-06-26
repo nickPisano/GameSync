@@ -12,8 +12,8 @@ use std::thread;
 
 use eframe::egui;
 use gamesync_core::{
-    AutoSyncSettings, BackupOptions, ConflictChoice, Diff, Engine, Game, SaveFile, Snapshot,
-    StorageReport, SyncOutcome,
+    AutoSyncSettings, BackupOptions, ConflictChoice, Diff, Engine, Game, PluginList, SaveFile,
+    Snapshot, StorageReport, SyncOutcome,
 };
 
 use crate::util::short;
@@ -72,6 +72,14 @@ pub enum Cmd {
         from: String,
         to: String,
     },
+    EnableEncryption(String),
+    MarkSetupComplete,
+    ListPlugins,
+    SetPluginEnabled {
+        id: String,
+        enabled: bool,
+    },
+    SetCommandsAllowed(bool),
 }
 
 /// Store-wide settings snapshot, refreshed whenever they change.
@@ -81,6 +89,7 @@ pub struct Meta {
     pub compression: bool,
     pub known_games: usize,
     pub remote: Option<String>,
+    pub setup_complete: bool,
 }
 
 /// An update from the worker to the UI.
@@ -98,6 +107,8 @@ pub enum Evt {
         files: Vec<SaveFile>,
     },
     Diff(Diff),
+    RecoveryKey(String),
+    Plugins(PluginList),
     Conflict {
         game: String,
         local: String,
@@ -146,6 +157,7 @@ fn meta(engine: &Engine, data_dir: &Path) -> Meta {
             .ok()
             .flatten()
             .map(|p| p.display().to_string()),
+        setup_complete: engine.is_setup_complete().unwrap_or(true),
     }
 }
 
@@ -188,6 +200,13 @@ fn emit_versions(e: &Engine, id: &str, emit: &impl Fn(Evt)) {
     }
 }
 
+fn emit_plugins(e: &Engine, emit: &impl Fn(Evt)) {
+    match e.list_plugins() {
+        Ok(pl) => emit(Evt::Plugins(pl)),
+        Err(err) => emit(Evt::Error(err.to_string())),
+    }
+}
+
 fn note(r: gamesync_core::Result<()>, ok_msg: &str, emit: &impl Fn(Evt)) -> bool {
     match r {
         Ok(()) => {
@@ -219,6 +238,25 @@ fn handle(cmd: Cmd, engine: &mut Option<Engine>, data_dir: &Path, emit: &impl Fn
         return;
     }
 
+    // Enabling encryption also re-creates the engine (now cipher-aware).
+    if let Cmd::EnableEncryption(pass) = cmd {
+        emit(Evt::Busy(true));
+        match Engine::init_encryption(data_dir, &pass) {
+            Ok(rk) => match Engine::unlock(data_dir.to_path_buf(), &pass) {
+                Ok(e2) => {
+                    emit(Evt::RecoveryKey(rk.grouped()));
+                    emit(Evt::Opened(meta(&e2, data_dir)));
+                    relist(&e2, emit);
+                    *engine = Some(e2);
+                }
+                Err(err) => emit(Evt::Error(format!("Re-open after enabling failed: {err}"))),
+            },
+            Err(err) => emit(Evt::Error(format!("Couldn't enable encryption: {err}"))),
+        }
+        emit(Evt::Busy(false));
+        return;
+    }
+
     let Some(e) = engine.as_ref() else {
         emit(Evt::Error("the data store is not open".to_string()));
         return;
@@ -227,6 +265,7 @@ fn handle(cmd: Cmd, engine: &mut Option<Engine>, data_dir: &Path, emit: &impl Fn
     emit(Evt::Busy(true));
     match cmd {
         Cmd::Unlock(_) => unreachable!("handled above"),
+        Cmd::EnableEncryption(_) => unreachable!("handled above"),
         Cmd::Scan => match e.scan_all() {
             Ok(found) => {
                 emit(Evt::Info(format!(
@@ -386,6 +425,19 @@ fn handle(cmd: Cmd, engine: &mut Option<Engine>, data_dir: &Path, emit: &impl Fn
             Ok(d) => emit(Evt::Diff(d)),
             Err(err) => emit(Evt::Error(err.to_string())),
         },
+        Cmd::MarkSetupComplete => {
+            note(e.mark_setup_complete(), "", emit);
+            emit(Evt::Opened(meta(e, data_dir)));
+        }
+        Cmd::ListPlugins => emit_plugins(e, emit),
+        Cmd::SetPluginEnabled { id, enabled } => {
+            note(e.set_plugin_enabled(&id, enabled), "", emit);
+            emit_plugins(e, emit);
+        }
+        Cmd::SetCommandsAllowed(allowed) => {
+            note(e.set_commands_allowed(allowed), "", emit);
+            emit_plugins(e, emit);
+        }
     }
     emit(Evt::Busy(false));
 }
