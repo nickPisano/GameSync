@@ -535,6 +535,7 @@ impl App {
                                 self.summaries.get(&g.id).copied().unwrap_or((0, None));
                             egui::Frame::group(ui.style())
                                 .fill(card_fill)
+                                .corner_radius(egui::CornerRadius::same(15))
                                 .inner_margin(egui::Margin::same(16))
                                 .show(ui, |ui| {
                                     // Split the row into a left column + a fixed-width right
@@ -543,7 +544,7 @@ impl App {
                                     // back and push the buttons further right each frame).
                                     let gap = ui.spacing().item_spacing.x;
                                     let full = ui.available_width();
-                                    let right_w = 360.0_f32.min((full - gap - 120.0).max(120.0));
+                                    let right_w = 450.0_f32.min((full - gap - 120.0).max(120.0));
                                     let left_w = full - right_w - gap;
                                     ui.horizontal(|ui| {
                                         // Left column: name/badge, path, status, links.
@@ -555,7 +556,7 @@ impl App {
                                                 ui.horizontal(|ui| {
                                                     ui.label(
                                                         RichText::new(g.name.as_str())
-                                                            .size(15.0)
+                                                            .size(16.0)
                                                             .strong(),
                                                     );
                                                     badge(ui, g.platform.as_str());

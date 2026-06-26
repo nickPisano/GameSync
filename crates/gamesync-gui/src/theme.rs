@@ -38,7 +38,7 @@ pub fn apply_style(ctx: &egui::Context) {
     ]
     .into();
     style.spacing.item_spacing = egui::vec2(8.0, 6.0);
-    style.spacing.button_padding = egui::vec2(12.0, 6.0);
+    style.spacing.button_padding = egui::vec2(15.0, 8.0);
     ctx.set_style(style);
 }
 
@@ -238,13 +238,13 @@ fn themed_visuals(p: &Palette) -> Visuals {
     v.widgets.noninteractive.bg_stroke.color = p.border;
     v.widgets.hovered.bg_stroke.color = p.accent;
     v.widgets.active.bg_stroke.color = p.accent;
-    let cr = egui::CornerRadius::same(6);
+    let cr = egui::CornerRadius::same(8);
     v.widgets.noninteractive.corner_radius = cr;
     v.widgets.inactive.corner_radius = cr;
     v.widgets.hovered.corner_radius = cr;
     v.widgets.active.corner_radius = cr;
     v.widgets.open.corner_radius = cr;
-    v.window_corner_radius = egui::CornerRadius::same(10);
+    v.window_corner_radius = egui::CornerRadius::same(12);
     v
 }
 
