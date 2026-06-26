@@ -317,123 +317,126 @@ impl App {
 
     fn render_topbar(&mut self, ctx: &egui::Context, tx: &Sender<Cmd>) {
         let accent = self.accent();
-        egui::TopBottomPanel::top("top").show(ctx, |ui| {
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                if let Some(tex) = &self.brand {
-                    ui.image(egui::load::SizedTexture::new(
-                        tex.id(),
-                        egui::vec2(30.0, 30.0),
-                    ));
-                } else {
-                    ui.label(
-                        RichText::new(" GS ")
-                            .size(18.0)
-                            .strong()
-                            .color(Color32::WHITE)
-                            .background_color(accent),
-                    );
-                }
-                ui.add_space(4.0);
-                ui.label(RichText::new("GameSync").size(18.0).strong());
-                ui.label(RichText::new("safe save backup & sync").weak().small());
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("Settings").clicked() {
-                        self.show_settings = true;
+        egui::TopBottomPanel::top("top")
+            .frame(panel_frame(ctx, 13))
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    if let Some(tex) = &self.brand {
+                        ui.image(egui::load::SizedTexture::new(
+                            tex.id(),
+                            egui::vec2(30.0, 30.0),
+                        ));
+                    } else {
+                        ui.label(
+                            RichText::new(" GS ")
+                                .size(18.0)
+                                .strong()
+                                .color(Color32::WHITE)
+                                .background_color(accent),
+                        );
                     }
-                    if ui.button("Plugins").clicked() {
-                        self.show_plugins = true;
-                        let _ = tx.send(Cmd::ListPlugins);
-                    }
-                    if ui.button("Add game").clicked() {
-                        self.show_add = true;
-                    }
-                    if ui.button("Scan").clicked() {
-                        let _ = tx.send(Cmd::Scan);
-                    }
-                    if ui
-                        .add_enabled(
-                            self.remote.is_some(),
-                            egui::Button::new(RichText::new("Sync all").color(Color32::WHITE))
-                                .fill(accent),
-                        )
-                        .clicked()
-                    {
-                        let _ = tx.send(Cmd::SyncAll);
-                    }
+                    ui.add_space(4.0);
+                    ui.label(RichText::new("GameSync").size(18.0).strong());
+                    ui.label(RichText::new("safe save backup & sync").weak().small());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("Settings").clicked() {
+                            self.show_settings = true;
+                        }
+                        if ui.button("Plugins").clicked() {
+                            self.show_plugins = true;
+                            let _ = tx.send(Cmd::ListPlugins);
+                        }
+                        if ui.button("Add game").clicked() {
+                            self.show_add = true;
+                        }
+                        if ui.button("Scan").clicked() {
+                            let _ = tx.send(Cmd::Scan);
+                        }
+                        if ui
+                            .add_enabled(
+                                self.remote.is_some(),
+                                egui::Button::new(RichText::new("Sync all").color(Color32::WHITE))
+                                    .fill(accent),
+                            )
+                            .clicked()
+                        {
+                            let _ = tx.send(Cmd::SyncAll);
+                        }
+                    });
                 });
             });
-            ui.add_space(6.0);
-        });
     }
 
     fn render_remote_bar(&mut self, ctx: &egui::Context, tx: &Sender<Cmd>) {
         let accent = self.accent();
-        egui::TopBottomPanel::top("remote").show(ctx, |ui| {
-            ui.add_space(5.0);
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("REMOTE").small().weak());
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(
-                        RichText::new(if self.remote.is_some() {
-                            "set"
-                        } else {
-                            "not set"
-                        })
-                        .small()
-                        .weak(),
-                    );
-                    if primary_button(ui, "Save", accent).clicked() {
-                        let _ = tx.send(Cmd::SetRemote(self.remote_buf.trim().to_string()));
-                    }
-                    if ui.button("Browse…").clicked() {
-                        if let Some(p) = rfd::FileDialog::new().pick_folder() {
-                            self.remote_buf = p.display().to_string();
+        egui::TopBottomPanel::top("remote")
+            .frame(panel_frame(ctx, 11))
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("REMOTE").small().weak());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(
+                            RichText::new(if self.remote.is_some() {
+                                "set"
+                            } else {
+                                "not set"
+                            })
+                            .small()
+                            .weak(),
+                        );
+                        if primary_button(ui, "Save", accent).clicked() {
+                            let _ = tx.send(Cmd::SetRemote(self.remote_buf.trim().to_string()));
                         }
-                    }
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.remote_buf)
-                            .desired_width(f32::INFINITY)
-                            .hint_text("Path to a shared/cloud folder (e.g. ~/Dropbox/GameSync)"),
-                    );
+                        if ui.button("Browse…").clicked() {
+                            if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                                self.remote_buf = p.display().to_string();
+                            }
+                        }
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.remote_buf)
+                                .desired_width(f32::INFINITY)
+                                .hint_text(
+                                    "Path to a shared/cloud folder (e.g. ~/Dropbox/GameSync)",
+                                ),
+                        );
+                    });
                 });
             });
-            ui.add_space(5.0);
-        });
     }
 
     fn render_status(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
-            ui.add_space(3.0);
-            ui.horizontal(|ui| {
-                if self.busy > 0 {
-                    ui.spinner();
-                    ui.label("Working…");
-                } else {
-                    let enc = if self.encrypted {
-                        "Encrypted"
+        egui::TopBottomPanel::bottom("status")
+            .frame(panel_frame(ctx, 7))
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    if self.busy > 0 {
+                        ui.spinner();
+                        ui.label("Working…");
                     } else {
-                        "Unencrypted"
-                    };
-                    let rem = if self.remote.is_some() {
-                        "remote set"
-                    } else {
-                        "no remote"
-                    };
-                    ui.label(
-                        RichText::new(format!("{enc} · {} games · {rem}", self.games.len())).weak(),
-                    );
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(
-                        RichText::new(self.data_dir.display().to_string())
-                            .weak()
-                            .small(),
-                    );
+                        let enc = if self.encrypted {
+                            "Encrypted"
+                        } else {
+                            "Unencrypted"
+                        };
+                        let rem = if self.remote.is_some() {
+                            "remote set"
+                        } else {
+                            "no remote"
+                        };
+                        ui.label(
+                            RichText::new(format!("{enc} · {} games · {rem}", self.games.len()))
+                                .weak(),
+                        );
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(
+                            RichText::new(self.data_dir.display().to_string())
+                                .weak()
+                                .small(),
+                        );
+                    });
                 });
             });
-            ui.add_space(3.0);
-        });
     }
 
     fn render_library(&mut self, ctx: &egui::Context, tx: &Sender<Cmd>) {
@@ -471,219 +474,239 @@ impl App {
                 SortKey::Name => ga.name.to_lowercase().cmp(&gb.name.to_lowercase()),
             }
         });
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("Games ({})", self.games.len())).strong());
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.search)
-                            .hint_text("Filter…")
-                            .desired_width(180.0),
-                    );
-                    egui::ComboBox::from_id_salt("sort")
-                        .selected_text(self.sort_key.label())
-                        .width(170.0)
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut self.sort_key, SortKey::Name, "Name (A–Z)");
-                            ui.selectable_value(
-                                &mut self.sort_key,
-                                SortKey::Recent,
-                                "Recently backed up",
-                            );
-                            ui.selectable_value(
-                                &mut self.sort_key,
-                                SortKey::Versions,
-                                "Most versions",
-                            );
-                            ui.selectable_value(&mut self.sort_key, SortKey::Platform, "Platform");
-                        });
-                    ui.label(RichText::new("Sort").small().weak());
+        egui::CentralPanel::default()
+            .frame(panel_frame(ctx, 20))
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(format!("Games ({})", self.games.len())).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.search)
+                                .hint_text("Filter…")
+                                .desired_width(180.0),
+                        );
+                        egui::ComboBox::from_id_salt("sort")
+                            .selected_text(self.sort_key.label())
+                            .width(170.0)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    &mut self.sort_key,
+                                    SortKey::Name,
+                                    "Name (A–Z)",
+                                );
+                                ui.selectable_value(
+                                    &mut self.sort_key,
+                                    SortKey::Recent,
+                                    "Recently backed up",
+                                );
+                                ui.selectable_value(
+                                    &mut self.sort_key,
+                                    SortKey::Versions,
+                                    "Most versions",
+                                );
+                                ui.selectable_value(
+                                    &mut self.sort_key,
+                                    SortKey::Platform,
+                                    "Platform",
+                                );
+                            });
+                        ui.label(RichText::new("Sort").small().weak());
+                    });
                 });
-            });
-            ui.add_space(4.0);
-            let q = self.search.trim().to_lowercase();
-            let card_fill = ui.visuals().faint_bg_color;
-            egui::ScrollArea::vertical()
-                .auto_shrink(false)
-                .show(ui, |ui| {
-                    if self.games.is_empty() {
-                        ui.add_space(40.0);
-                        ui.vertical_centered(|ui| {
-                            ui.label("No games tracked yet.");
-                            ui.label("Click Scan to detect installed games, or Add game.");
-                        });
-                    }
-                    for &gi in &order {
-                        let g = &self.games[gi];
-                        if !q.is_empty() && !g.name.to_lowercase().contains(&q) {
-                            continue;
+                ui.add_space(4.0);
+                let q = self.search.trim().to_lowercase();
+                let card_fill = ui.visuals().faint_bg_color;
+                egui::ScrollArea::vertical()
+                    .auto_shrink(false)
+                    .show(ui, |ui| {
+                        if self.games.is_empty() {
+                            ui.add_space(40.0);
+                            ui.vertical_centered(|ui| {
+                                ui.label("No games tracked yet.");
+                                ui.label("Click Scan to detect installed games, or Add game.");
+                            });
                         }
-                        let (count, last) = self.summaries.get(&g.id).copied().unwrap_or((0, None));
-                        egui::Frame::group(ui.style())
-                            .fill(card_fill)
-                            .inner_margin(egui::Margin::same(16))
-                            .show(ui, |ui| {
-                                ui.set_min_width(ui.available_width());
-                                let full = ui.available_width();
-                                let left_w = (full - 360.0).max(160.0);
-                                let right_w = full - left_w;
-                                ui.horizontal(|ui| {
-                                    // Left column: name/badge, path, status, links.
-                                    ui.allocate_ui_with_layout(
-                                        egui::vec2(left_w, 0.0),
-                                        egui::Layout::top_down(egui::Align::Min),
-                                        |ui| {
-                                            ui.set_width(left_w);
-                                            ui.horizontal(|ui| {
-                                                ui.label(
-                                                    RichText::new(g.name.as_str())
-                                                        .size(15.0)
-                                                        .strong(),
-                                                );
-                                                badge(ui, g.platform.as_str());
-                                            });
-                                            ui.label(
-                                                RichText::new(g.save_root.display().to_string())
-                                                    .weak()
-                                                    .small(),
-                                            );
-                                            let last_str = last
-                                                .map(humanize_ago)
-                                                .unwrap_or_else(|| "never".to_string());
-                                            ui.label(
-                                                RichText::new(format!(
-                                                    "{count} versions · last backup {last_str}"
-                                                ))
-                                                .weak()
-                                                .small(),
-                                            );
-                                            if self.auto_sync.backup_on_exit {
+                        for &gi in &order {
+                            let g = &self.games[gi];
+                            if !q.is_empty() && !g.name.to_lowercase().contains(&q) {
+                                continue;
+                            }
+                            let (count, last) =
+                                self.summaries.get(&g.id).copied().unwrap_or((0, None));
+                            egui::Frame::group(ui.style())
+                                .fill(card_fill)
+                                .inner_margin(egui::Margin::same(16))
+                                .show(ui, |ui| {
+                                    ui.set_min_width(ui.available_width());
+                                    let full = ui.available_width();
+                                    let left_w = (full - 360.0).max(160.0);
+                                    let right_w = full - left_w;
+                                    ui.horizontal(|ui| {
+                                        // Left column: name/badge, path, status, links.
+                                        ui.allocate_ui_with_layout(
+                                            egui::vec2(left_w, 0.0),
+                                            egui::Layout::top_down(egui::Align::Min),
+                                            |ui| {
+                                                ui.set_width(left_w);
+                                                ui.horizontal(|ui| {
+                                                    ui.label(
+                                                        RichText::new(g.name.as_str())
+                                                            .size(15.0)
+                                                            .strong(),
+                                                    );
+                                                    badge(ui, g.platform.as_str());
+                                                });
                                                 ui.label(
                                                     RichText::new(
-                                                        "backs up automatically when it closes",
+                                                        g.save_root.display().to_string(),
                                                     )
                                                     .weak()
                                                     .small(),
                                                 );
-                                            }
-                                            if let Some((local, remote)) =
-                                                self.conflicts.get(&g.id).cloned()
-                                            {
-                                                ui.add_space(4.0);
-                                                ui.colored_label(
-                                                    Color32::from_rgb(220, 150, 60),
-                                                    format!(
-                                                        "Conflict: yours ({}) vs remote ({}).",
-                                                        short(&local),
-                                                        short(&remote)
-                                                    ),
+                                                let last_str = last
+                                                    .map(humanize_ago)
+                                                    .unwrap_or_else(|| "never".to_string());
+                                                ui.label(
+                                                    RichText::new(format!(
+                                                        "{count} versions · last backup {last_str}"
+                                                    ))
+                                                    .weak()
+                                                    .small(),
                                                 );
+                                                if self.auto_sync.backup_on_exit {
+                                                    ui.label(
+                                                        RichText::new(
+                                                            "backs up automatically when it closes",
+                                                        )
+                                                        .weak()
+                                                        .small(),
+                                                    );
+                                                }
+                                                if let Some((local, remote)) =
+                                                    self.conflicts.get(&g.id).cloned()
+                                                {
+                                                    ui.add_space(4.0);
+                                                    ui.colored_label(
+                                                        Color32::from_rgb(220, 150, 60),
+                                                        format!(
+                                                            "Conflict: yours ({}) vs remote ({}).",
+                                                            short(&local),
+                                                            short(&remote)
+                                                        ),
+                                                    );
+                                                    ui.horizontal(|ui| {
+                                                        if ui.button("Keep mine").clicked() {
+                                                            let _ = tx.send(Cmd::Resolve {
+                                                                id: g.id.clone(),
+                                                                keep_local: true,
+                                                            });
+                                                            self.conflicts.remove(&g.id);
+                                                        }
+                                                        if ui.button("Take remote").clicked() {
+                                                            let _ = tx.send(Cmd::Resolve {
+                                                                id: g.id.clone(),
+                                                                keep_local: false,
+                                                            });
+                                                            self.conflicts.remove(&g.id);
+                                                        }
+                                                        if ui.button("Keep both").clicked() {
+                                                            let _ =
+                                                                tx.send(Cmd::Fork(g.id.clone()));
+                                                            self.conflicts.remove(&g.id);
+                                                        }
+                                                    });
+                                                }
+                                                ui.add_space(2.0);
                                                 ui.horizontal(|ui| {
-                                                    if ui.button("Keep mine").clicked() {
-                                                        let _ = tx.send(Cmd::Resolve {
-                                                            id: g.id.clone(),
-                                                            keep_local: true,
-                                                        });
-                                                        self.conflicts.remove(&g.id);
+                                                    if ui.link("Rename").clicked() {
+                                                        self.renaming = Some(g.id.clone());
+                                                        self.rename_buf = g.name.clone();
                                                     }
-                                                    if ui.button("Take remote").clicked() {
-                                                        let _ = tx.send(Cmd::Resolve {
-                                                            id: g.id.clone(),
-                                                            keep_local: false,
-                                                        });
-                                                        self.conflicts.remove(&g.id);
+                                                    ui.label(RichText::new("·").weak());
+                                                    if ui.link("Settings").clicked() {
+                                                        self.gs_game = Some(g.id.clone());
+                                                        self.gs_extra = g
+                                                            .extra_roots
+                                                            .iter()
+                                                            .map(|p| p.display().to_string())
+                                                            .collect();
+                                                        self.gs_exe = g
+                                                            .install_dir
+                                                            .as_ref()
+                                                            .map(|p| p.display().to_string())
+                                                            .unwrap_or_default();
                                                     }
-                                                    if ui.button("Keep both").clicked() {
-                                                        let _ = tx.send(Cmd::Fork(g.id.clone()));
-                                                        self.conflicts.remove(&g.id);
+                                                    ui.label(RichText::new("·").weak());
+                                                    if ui
+                                                        .add(
+                                                            egui::Label::new(
+                                                                RichText::new("Remove").color(
+                                                                    Color32::from_rgb(
+                                                                        0xe0, 0x6c, 0x6c,
+                                                                    ),
+                                                                ),
+                                                            )
+                                                            .sense(egui::Sense::click()),
+                                                        )
+                                                        .on_hover_cursor(
+                                                            egui::CursorIcon::PointingHand,
+                                                        )
+                                                        .clicked()
+                                                    {
+                                                        self.confirm_remove = Some(g.id.clone());
                                                     }
                                                 });
-                                            }
-                                            ui.add_space(2.0);
-                                            ui.horizontal(|ui| {
-                                                if ui.link("Rename").clicked() {
-                                                    self.renaming = Some(g.id.clone());
-                                                    self.rename_buf = g.name.clone();
+                                            },
+                                        );
+                                        // Right column: toggle + action buttons, right-aligned.
+                                        ui.allocate_ui_with_layout(
+                                            egui::vec2(right_w, 0.0),
+                                            egui::Layout::right_to_left(egui::Align::Center),
+                                            |ui| {
+                                                if tonal_button(
+                                                    ui,
+                                                    "Sync now",
+                                                    accent,
+                                                    self.remote.is_some(),
+                                                )
+                                                .clicked()
+                                                {
+                                                    let _ = tx.send(Cmd::Sync(g.id.clone()));
                                                 }
-                                                ui.label(RichText::new("·").weak());
-                                                if ui.link("Settings").clicked() {
-                                                    self.gs_game = Some(g.id.clone());
-                                                    self.gs_extra = g
-                                                        .extra_roots
-                                                        .iter()
-                                                        .map(|p| p.display().to_string())
-                                                        .collect();
-                                                    self.gs_exe = g
-                                                        .install_dir
-                                                        .as_ref()
-                                                        .map(|p| p.display().to_string())
-                                                        .unwrap_or_default();
-                                                }
-                                                ui.label(RichText::new("·").weak());
-                                                if ui
-                                                    .add(
-                                                        egui::Label::new(
-                                                            RichText::new("Remove").color(
-                                                                Color32::from_rgb(0xe0, 0x6c, 0x6c),
-                                                            ),
-                                                        )
-                                                        .sense(egui::Sense::click()),
-                                                    )
-                                                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                                if tonal_button(ui, "History", accent, count > 0)
                                                     .clicked()
                                                 {
-                                                    self.confirm_remove = Some(g.id.clone());
+                                                    self.show_history = Some(g.id.clone());
+                                                    let _ = tx.send(Cmd::Versions(g.id.clone()));
                                                 }
-                                            });
-                                        },
-                                    );
-                                    // Right column: toggle + action buttons, right-aligned.
-                                    ui.allocate_ui_with_layout(
-                                        egui::vec2(right_w, 0.0),
-                                        egui::Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
-                                            if tonal_button(
-                                                ui,
-                                                "Sync now",
-                                                accent,
-                                                self.remote.is_some(),
-                                            )
-                                            .clicked()
-                                            {
-                                                let _ = tx.send(Cmd::Sync(g.id.clone()));
-                                            }
-                                            if tonal_button(ui, "History", accent, count > 0)
-                                                .clicked()
-                                            {
-                                                self.show_history = Some(g.id.clone());
-                                                let _ = tx.send(Cmd::Versions(g.id.clone()));
-                                            }
-                                            if tonal_button(ui, "Files", accent, true).clicked() {
-                                                self.files_game = Some(g.id.clone());
-                                                self.files.clear();
-                                                self.files_for = None;
-                                                let _ = tx.send(Cmd::ListFiles(g.id.clone()));
-                                            }
-                                            if tonal_button(ui, "Back up", accent, true).clicked() {
-                                                let _ = tx.send(Cmd::Backup(g.id.clone()));
-                                            }
-                                            ui.label(RichText::new("Sync").small().weak());
-                                            let mut sync = g.sync_enabled;
-                                            if toggle_switch(ui, &mut sync, accent).changed() {
-                                                let _ = tx.send(Cmd::ToggleSync {
-                                                    id: g.id.clone(),
-                                                    enabled: sync,
-                                                });
-                                            }
-                                        },
-                                    );
+                                                if tonal_button(ui, "Files", accent, true).clicked()
+                                                {
+                                                    self.files_game = Some(g.id.clone());
+                                                    self.files.clear();
+                                                    self.files_for = None;
+                                                    let _ = tx.send(Cmd::ListFiles(g.id.clone()));
+                                                }
+                                                if tonal_button(ui, "Back up", accent, true)
+                                                    .clicked()
+                                                {
+                                                    let _ = tx.send(Cmd::Backup(g.id.clone()));
+                                                }
+                                                ui.label(RichText::new("Sync").small().weak());
+                                                let mut sync = g.sync_enabled;
+                                                if toggle_switch(ui, &mut sync, accent).changed() {
+                                                    let _ = tx.send(Cmd::ToggleSync {
+                                                        id: g.id.clone(),
+                                                        enabled: sync,
+                                                    });
+                                                }
+                                            },
+                                        );
+                                    });
                                 });
-                            });
-                        ui.add_space(8.0);
-                    }
-                });
-        });
+                            ui.add_space(8.0);
+                        }
+                    });
+            });
     }
 
     fn render_history(&mut self, ctx: &egui::Context, tx: &Sender<Cmd>) {
@@ -1348,6 +1371,18 @@ fn load_brand(ctx: &egui::Context) -> Option<egui::TextureHandle> {
     let pixels = img.into_raw();
     let color = egui::ColorImage::from_rgba_unmultiplied(size, &pixels);
     Some(ctx.load_texture("brand", color, egui::TextureOptions::LINEAR))
+}
+
+/// A panel frame with the web build's 22px horizontal padding (and `v` vertical).
+fn panel_frame(ctx: &egui::Context, v: i8) -> egui::Frame {
+    egui::Frame::default()
+        .fill(ctx.style().visuals.panel_fill)
+        .inner_margin(egui::Margin {
+            left: 22,
+            right: 22,
+            top: v,
+            bottom: v,
+        })
 }
 
 /// Open the OS file manager at `path` (revealing the file where supported).
