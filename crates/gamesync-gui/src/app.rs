@@ -122,6 +122,11 @@ pub struct App {
 
     custom_theme: Option<Custom>,
     use_custom: bool,
+    /// Whether the "all themes" gallery modal is open.
+    show_themes: bool,
+    /// Whether the paste-JSON theme importer is showing, and its buffer.
+    theme_import_open: bool,
+    theme_import_text: String,
 
     _tray: Option<TrayIcon>,
     tray_rx: Option<Receiver<TrayAction>>,
@@ -196,6 +201,9 @@ impl App {
             update_status: None,
             custom_theme: loaded.custom,
             use_custom: loaded.use_custom,
+            show_themes: false,
+            theme_import_open: false,
+            theme_import_text: String::new(),
             _tray: tray,
             tray_rx,
             quitting: false,
@@ -582,107 +590,114 @@ impl App {
                                     let full = ui.available_width();
                                     let right_w = 370.0_f32.min((full - gap - 120.0).max(120.0));
                                     let left_w = full - right_w - gap;
-                                    ui.horizontal(|ui| {
-                                        // Left column: name/badge, path, status, links.
-                                        ui.allocate_ui_with_layout(
-                                            egui::vec2(left_w, 0.0),
-                                            egui::Layout::top_down(egui::Align::Min),
-                                            |ui| {
-                                                ui.set_width(left_w);
-                                                // Tighten the line spacing to match the
-                                                // web build's compact card (path/meta
-                                                // lines are 4–5px apart, not egui's 6px).
-                                                ui.spacing_mut().item_spacing.y = 4.0;
-                                                ui.horizontal(|ui| {
+                                    ui.with_layout(
+                                        egui::Layout::left_to_right(egui::Align::Min),
+                                        |ui| {
+                                            // Left column: name/badge, path, status, links.
+                                            let left_col = ui.allocate_ui_with_layout(
+                                                egui::vec2(left_w, 0.0),
+                                                egui::Layout::top_down(egui::Align::Min),
+                                                |ui| {
+                                                    ui.set_width(left_w);
+                                                    // Tighten the line spacing to match the
+                                                    // web build's compact card (path/meta
+                                                    // lines are 4–5px apart, not egui's 6px).
+                                                    ui.spacing_mut().item_spacing.y = 4.0;
+                                                    ui.horizontal(|ui| {
+                                                        ui.label(
+                                                            RichText::new(g.name.as_str())
+                                                                .size(16.0)
+                                                                .strong(),
+                                                        );
+                                                        badge(ui, g.platform.as_str());
+                                                    });
                                                     ui.label(
-                                                        RichText::new(g.name.as_str())
-                                                            .size(16.0)
-                                                            .strong(),
+                                                        RichText::new(
+                                                            g.save_root.display().to_string(),
+                                                        )
+                                                        .weak()
+                                                        .small(),
                                                     );
-                                                    badge(ui, g.platform.as_str());
-                                                });
-                                                ui.label(
-                                                    RichText::new(
-                                                        g.save_root.display().to_string(),
-                                                    )
-                                                    .weak()
-                                                    .small(),
-                                                );
-                                                let last_str = last
-                                                    .map(humanize_ago)
-                                                    .unwrap_or_else(|| "never".to_string());
-                                                ui.label(
-                                                    RichText::new(format!(
+                                                    let last_str = last
+                                                        .map(humanize_ago)
+                                                        .unwrap_or_else(|| "never".to_string());
+                                                    ui.label(
+                                                        RichText::new(format!(
                                                         "{count} versions · last backup {last_str}"
                                                     ))
-                                                    .weak()
-                                                    .small(),
-                                                );
-                                                if self.auto_sync.backup_on_exit {
-                                                    ui.label(
+                                                        .weak()
+                                                        .small(),
+                                                    );
+                                                    if self.auto_sync.backup_on_exit {
+                                                        ui.label(
                                                         RichText::new(
                                                             "backs up automatically when it closes",
                                                         )
                                                         .weak()
                                                         .small(),
                                                     );
-                                                }
-                                                if let Some((local, remote)) =
-                                                    self.conflicts.get(&g.id).cloned()
-                                                {
-                                                    ui.add_space(4.0);
-                                                    ui.colored_label(
-                                                        Color32::from_rgb(220, 150, 60),
-                                                        format!(
+                                                    }
+                                                    if let Some((local, remote)) =
+                                                        self.conflicts.get(&g.id).cloned()
+                                                    {
+                                                        ui.add_space(4.0);
+                                                        ui.colored_label(
+                                                            Color32::from_rgb(220, 150, 60),
+                                                            format!(
                                                             "Conflict: yours ({}) vs remote ({}).",
                                                             short(&local),
                                                             short(&remote)
                                                         ),
-                                                    );
+                                                        );
+                                                        ui.horizontal(|ui| {
+                                                            if ui.button("Keep mine").clicked() {
+                                                                let _ = tx.send(Cmd::Resolve {
+                                                                    id: g.id.clone(),
+                                                                    keep_local: true,
+                                                                });
+                                                                self.conflicts.remove(&g.id);
+                                                            }
+                                                            if ui.button("Take remote").clicked() {
+                                                                let _ = tx.send(Cmd::Resolve {
+                                                                    id: g.id.clone(),
+                                                                    keep_local: false,
+                                                                });
+                                                                self.conflicts.remove(&g.id);
+                                                            }
+                                                            if ui.button("Keep both").clicked() {
+                                                                let _ = tx
+                                                                    .send(Cmd::Fork(g.id.clone()));
+                                                                self.conflicts.remove(&g.id);
+                                                            }
+                                                        });
+                                                    }
+                                                    // Height of the main info (everything above the
+                                                    // secondary links row) — the action buttons are
+                                                    // centered against this, not the full card, so
+                                                    // they read as centered rather than sitting low.
+                                                    let main_h = ui.min_rect().height();
+                                                    ui.add_space(1.0);
                                                     ui.horizontal(|ui| {
-                                                        if ui.button("Keep mine").clicked() {
-                                                            let _ = tx.send(Cmd::Resolve {
-                                                                id: g.id.clone(),
-                                                                keep_local: true,
-                                                            });
-                                                            self.conflicts.remove(&g.id);
+                                                        if ui.link("Rename").clicked() {
+                                                            self.renaming = Some(g.id.clone());
+                                                            self.rename_buf = g.name.clone();
                                                         }
-                                                        if ui.button("Take remote").clicked() {
-                                                            let _ = tx.send(Cmd::Resolve {
-                                                                id: g.id.clone(),
-                                                                keep_local: false,
-                                                            });
-                                                            self.conflicts.remove(&g.id);
+                                                        ui.label(RichText::new("·").weak());
+                                                        if ui.link("Settings").clicked() {
+                                                            self.gs_game = Some(g.id.clone());
+                                                            self.gs_extra = g
+                                                                .extra_roots
+                                                                .iter()
+                                                                .map(|p| p.display().to_string())
+                                                                .collect();
+                                                            self.gs_exe = g
+                                                                .install_dir
+                                                                .as_ref()
+                                                                .map(|p| p.display().to_string())
+                                                                .unwrap_or_default();
                                                         }
-                                                        if ui.button("Keep both").clicked() {
-                                                            let _ =
-                                                                tx.send(Cmd::Fork(g.id.clone()));
-                                                            self.conflicts.remove(&g.id);
-                                                        }
-                                                    });
-                                                }
-                                                ui.add_space(1.0);
-                                                ui.horizontal(|ui| {
-                                                    if ui.link("Rename").clicked() {
-                                                        self.renaming = Some(g.id.clone());
-                                                        self.rename_buf = g.name.clone();
-                                                    }
-                                                    ui.label(RichText::new("·").weak());
-                                                    if ui.link("Settings").clicked() {
-                                                        self.gs_game = Some(g.id.clone());
-                                                        self.gs_extra = g
-                                                            .extra_roots
-                                                            .iter()
-                                                            .map(|p| p.display().to_string())
-                                                            .collect();
-                                                        self.gs_exe = g
-                                                            .install_dir
-                                                            .as_ref()
-                                                            .map(|p| p.display().to_string())
-                                                            .unwrap_or_default();
-                                                    }
-                                                    ui.label(RichText::new("·").weak());
-                                                    if ui
+                                                        ui.label(RichText::new("·").weak());
+                                                        if ui
                                                         .link("Redirect to synced folder")
                                                         .on_hover_text(
                                                             "Move this save folder into a synced \
@@ -704,72 +719,89 @@ impl App {
                                                             });
                                                         }
                                                     }
-                                                    ui.label(RichText::new("·").weak());
-                                                    if ui
-                                                        .add(
-                                                            egui::Label::new(
-                                                                RichText::new("Remove").color(
-                                                                    Color32::from_rgb(
-                                                                        0xe0, 0x6c, 0x6c,
+                                                        ui.label(RichText::new("·").weak());
+                                                        if ui
+                                                            .add(
+                                                                egui::Label::new(
+                                                                    RichText::new("Remove").color(
+                                                                        Color32::from_rgb(
+                                                                            0xe0, 0x6c, 0x6c,
+                                                                        ),
                                                                     ),
-                                                                ),
+                                                                )
+                                                                .sense(egui::Sense::click()),
                                                             )
-                                                            .sense(egui::Sense::click()),
-                                                        )
-                                                        .on_hover_cursor(
-                                                            egui::CursorIcon::PointingHand,
-                                                        )
+                                                            .on_hover_cursor(
+                                                                egui::CursorIcon::PointingHand,
+                                                            )
+                                                            .clicked()
+                                                        {
+                                                            self.confirm_remove =
+                                                                Some(g.id.clone());
+                                                        }
+                                                    });
+                                                    main_h
+                                                },
+                                            );
+                                            // Right column: toggle + action buttons, right-aligned,
+                                            // vertically centered against the main info (so they sit
+                                            // at the visual middle rather than below it).
+                                            let main_h = left_col.inner;
+                                            ui.allocate_ui_with_layout(
+                                                egui::vec2(right_w, main_h),
+                                                egui::Layout::right_to_left(egui::Align::Center),
+                                                |ui| {
+                                                    ui.set_min_height(main_h);
+                                                    if tonal_button(
+                                                        ui,
+                                                        "Sync now",
+                                                        accent,
+                                                        self.remote.is_some(),
+                                                    )
+                                                    .clicked()
+                                                    {
+                                                        let _ = tx.send(Cmd::Sync(g.id.clone()));
+                                                    }
+                                                    if tonal_button(
+                                                        ui,
+                                                        "History",
+                                                        accent,
+                                                        count > 0,
+                                                    )
+                                                    .clicked()
+                                                    {
+                                                        self.show_history = Some(g.id.clone());
+                                                        let _ =
+                                                            tx.send(Cmd::Versions(g.id.clone()));
+                                                    }
+                                                    if tonal_button(ui, "Files", accent, true)
                                                         .clicked()
                                                     {
-                                                        self.confirm_remove = Some(g.id.clone());
+                                                        self.files_game = Some(g.id.clone());
+                                                        self.files.clear();
+                                                        self.files_for = None;
+                                                        let _ =
+                                                            tx.send(Cmd::ListFiles(g.id.clone()));
                                                     }
-                                                });
-                                            },
-                                        );
-                                        // Right column: toggle + action buttons, right-aligned.
-                                        ui.allocate_ui_with_layout(
-                                            egui::vec2(right_w, 0.0),
-                                            egui::Layout::right_to_left(egui::Align::Center),
-                                            |ui| {
-                                                if tonal_button(
-                                                    ui,
-                                                    "Sync now",
-                                                    accent,
-                                                    self.remote.is_some(),
-                                                )
-                                                .clicked()
-                                                {
-                                                    let _ = tx.send(Cmd::Sync(g.id.clone()));
-                                                }
-                                                if tonal_button(ui, "History", accent, count > 0)
-                                                    .clicked()
-                                                {
-                                                    self.show_history = Some(g.id.clone());
-                                                    let _ = tx.send(Cmd::Versions(g.id.clone()));
-                                                }
-                                                if tonal_button(ui, "Files", accent, true).clicked()
-                                                {
-                                                    self.files_game = Some(g.id.clone());
-                                                    self.files.clear();
-                                                    self.files_for = None;
-                                                    let _ = tx.send(Cmd::ListFiles(g.id.clone()));
-                                                }
-                                                if tonal_button(ui, "Back up", accent, true)
-                                                    .clicked()
-                                                {
-                                                    let _ = tx.send(Cmd::Backup(g.id.clone()));
-                                                }
-                                                ui.label(RichText::new("Sync").small().weak());
-                                                let mut sync = g.sync_enabled;
-                                                if toggle_switch(ui, &mut sync, accent).changed() {
-                                                    let _ = tx.send(Cmd::ToggleSync {
-                                                        id: g.id.clone(),
-                                                        enabled: sync,
-                                                    });
-                                                }
-                                            },
-                                        );
-                                    });
+                                                    if tonal_button(ui, "Back up", accent, true)
+                                                        .clicked()
+                                                    {
+                                                        let _ = tx.send(Cmd::Backup(g.id.clone()));
+                                                    }
+                                                    ui.label(RichText::new("Sync").small().weak());
+                                                    let mut sync = g.sync_enabled;
+                                                    if toggle_switch(ui, &mut sync, accent)
+                                                        .changed()
+                                                    {
+                                                        let _ = tx.send(Cmd::ToggleSync {
+                                                            id: g.id.clone(),
+                                                            enabled: sync,
+                                                        });
+                                                    }
+                                                },
+                                            );
+                                        },
+                                    );
                                 });
                             ui.add_space(8.0);
                         }
@@ -880,54 +912,29 @@ impl App {
             .show(ctx, |ui| {
                 ui.heading("Appearance");
                 ui.add_space(4.0);
-                // Pull the custom theme's swatch data out first so the closure
-                // below can still mutate `self` when one is clicked.
-                let custom_info = self.custom_theme.as_ref().map(|c| {
-                    let glow = if c.has_effects() {
-                        Some(c.glow_color().unwrap_or_else(|| c.accent_color()))
-                    } else {
-                        None
-                    };
-                    (c.name.clone(), c.bg_color(), c.accent_color(), glow)
-                });
                 ui.horizontal_wrapped(|ui| {
                     for t in Theme::ALL {
                         let selected = !self.use_custom && self.theme == t;
-                        if theme_choice(ui, t.name(), t.bg(), t.accent(), None, selected) {
+                        if let ThemePick::Select =
+                            theme_choice(ui, t.name(), t.bg(), t.accent(), None, selected, false)
+                        {
                             self.theme = t;
                             self.use_custom = false;
                             self.theme_dirty = true;
                         }
                     }
-                    if let Some((name, bg, accent_c, glow)) = &custom_info {
-                        if theme_choice(ui, name, *bg, *accent_c, *glow, self.use_custom) {
-                            self.use_custom = true;
-                            self.theme_dirty = true;
-                        }
-                    }
                 });
-                if ui.button("Import theme (JSON)…").clicked() {
-                    if let Some(p) = rfd::FileDialog::new()
-                        .add_filter("JSON", &["json"])
-                        .pick_file()
-                    {
-                        match std::fs::read_to_string(&p)
-                            .ok()
-                            .and_then(|s| crate::theme::parse_custom(&s))
-                        {
-                            Some(c) => {
-                                self.custom_theme = Some(c);
-                                self.use_custom = true;
-                                self.theme_dirty = true;
-                            }
-                            None => self.toasts.push(Toast {
-                                msg: "Couldn't parse that theme file.".to_string(),
-                                kind: ToastKind::Error,
-                                at: Instant::now(),
-                            }),
-                        }
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Show all themes…").clicked() {
+                        self.show_themes = true;
                     }
-                }
+                    ui.label(
+                        RichText::new("Custom imports & the full gallery")
+                            .weak()
+                            .small(),
+                    );
+                });
 
                 ui.separator();
                 ui.heading("Sync");
@@ -1044,6 +1051,191 @@ impl App {
                 }
             });
         self.show_settings = open;
+    }
+
+    /// The "all themes" gallery: every built-in + the imported theme (with its
+    /// delete ✕), plus the JSON importer. Opened from Settings → Show all themes.
+    fn render_themes_modal(&mut self, ctx: &egui::Context) {
+        if !self.show_themes {
+            return;
+        }
+        let accent = self.accent();
+        let glow = self.glow();
+        let mut open = self.show_themes;
+        egui::Window::new("Themes")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .default_width(440.0)
+            .show(ctx, |ui| {
+                ui.label(RichText::new("Pick a theme, or import your own.").weak());
+                ui.add_space(6.0);
+                // Pull the imported theme's swatch data out first so the closure
+                // below can still mutate `self` when it's clicked/deleted.
+                let custom_info = self.custom_theme.as_ref().map(|c| {
+                    let g = if c.has_effects() {
+                        Some(c.glow_color().unwrap_or_else(|| c.accent_color()))
+                    } else {
+                        None
+                    };
+                    (c.name.clone(), c.bg_color(), c.accent_color(), g)
+                });
+                // Lay the themes out a fixed 4 per row (built-ins first, then any
+                // imported theme), rather than packing as many as fit.
+                enum Entry {
+                    Builtin(Theme),
+                    Custom {
+                        name: String,
+                        bg: Color32,
+                        accent: Color32,
+                        glow: Option<Color32>,
+                    },
+                }
+                let mut entries: Vec<Entry> =
+                    Theme::ALL.into_iter().map(Entry::Builtin).collect();
+                if let Some((name, bg, accent_c, g)) = custom_info {
+                    entries.push(Entry::Custom {
+                        name,
+                        bg,
+                        accent: accent_c,
+                        glow: g,
+                    });
+                }
+                for row in entries.chunks(4) {
+                    ui.horizontal(|ui| {
+                        for entry in row {
+                            match entry {
+                                Entry::Builtin(t) => {
+                                    let selected = !self.use_custom && self.theme == *t;
+                                    if let ThemePick::Select = theme_choice(
+                                        ui,
+                                        t.name(),
+                                        t.bg(),
+                                        t.accent(),
+                                        None,
+                                        selected,
+                                        false,
+                                    ) {
+                                        self.theme = *t;
+                                        self.use_custom = false;
+                                        self.theme_dirty = true;
+                                    }
+                                }
+                                Entry::Custom {
+                                    name,
+                                    bg,
+                                    accent,
+                                    glow,
+                                } => {
+                                    match theme_choice(
+                                        ui,
+                                        name,
+                                        *bg,
+                                        *accent,
+                                        *glow,
+                                        self.use_custom,
+                                        true,
+                                    ) {
+                                        ThemePick::Select => {
+                                            self.use_custom = true;
+                                            self.theme_dirty = true;
+                                        }
+                                        ThemePick::Delete => {
+                                            self.custom_theme = None;
+                                            // Fall back to the last built-in theme.
+                                            self.use_custom = false;
+                                            self.theme_dirty = true;
+                                            self.toasts.push(Toast {
+                                                msg: format!(
+                                                    "Removed imported theme \"{name}\"."
+                                                ),
+                                                kind: ToastKind::Info,
+                                                at: Instant::now(),
+                                            });
+                                        }
+                                        ThemePick::None => {}
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                ui.add_space(6.0);
+                ui.separator();
+                ui.heading("Import a theme");
+                ui.horizontal(|ui| {
+                    if ui.button("Paste JSON…").clicked() {
+                        self.theme_import_open = !self.theme_import_open;
+                    }
+                    // Keep the file picker available as a secondary option.
+                    if ui.button("From file…").clicked() {
+                        if let Some(p) = rfd::FileDialog::new()
+                            .add_filter("JSON", &["json"])
+                            .pick_file()
+                        {
+                            match std::fs::read_to_string(&p)
+                                .ok()
+                                .and_then(|s| crate::theme::parse_custom(&s))
+                            {
+                                Some(c) => {
+                                    self.custom_theme = Some(c);
+                                    self.use_custom = true;
+                                    self.theme_dirty = true;
+                                }
+                                None => self.toasts.push(Toast {
+                                    msg: "Couldn't parse that theme file.".to_string(),
+                                    kind: ToastKind::Error,
+                                    at: Instant::now(),
+                                }),
+                            }
+                        }
+                    }
+                });
+                if self.theme_import_open {
+                    ui.add_space(4.0);
+                    ui.add(
+                        egui::TextEdit::multiline(&mut self.theme_import_text)
+                            .desired_rows(7)
+                            .desired_width(f32::INFINITY)
+                            .font(egui::TextStyle::Monospace)
+                            .hint_text(
+                                "Paste theme JSON here, e.g.\n{ \"name\": \"Ocean\", \"colors\": \
+                                 { \"bg\": \"#0a0e1a\", \"accent\": \"#22d3ee\" },\n  \"effects\": \
+                                 { \"glow\": \"#22d3ee\" } }",
+                            ),
+                    );
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        if primary_button(ui, "Import", accent, glow).clicked() {
+                            match crate::theme::parse_custom(&self.theme_import_text) {
+                                Some(c) => {
+                                    let name = c.name.clone();
+                                    self.custom_theme = Some(c);
+                                    self.use_custom = true;
+                                    self.theme_dirty = true;
+                                    self.theme_import_open = false;
+                                    self.theme_import_text.clear();
+                                    self.toasts.push(Toast {
+                                        msg: format!("Imported theme \"{name}\"."),
+                                        kind: ToastKind::Info,
+                                        at: Instant::now(),
+                                    });
+                                }
+                                None => self.toasts.push(Toast {
+                                    msg: "Couldn't parse that theme JSON.".to_string(),
+                                    kind: ToastKind::Error,
+                                    at: Instant::now(),
+                                }),
+                            }
+                        }
+                        if ui.button("Cancel").clicked() {
+                            self.theme_import_open = false;
+                        }
+                    });
+                }
+            });
+        self.show_themes = open;
     }
 
     fn render_add(&mut self, ctx: &egui::Context, tx: &Sender<Cmd>) {
@@ -1584,6 +1776,13 @@ fn theme_swatch(ui: &mut egui::Ui, bg: Color32, accent: Color32, glow: Option<Co
 
 /// A clickable theme cell: a preview swatch + the theme name. The selected cell
 /// gets an accent ring. Returns true when clicked.
+/// Result of clicking a theme cell.
+enum ThemePick {
+    None,
+    Select,
+    Delete,
+}
+
 fn theme_choice(
     ui: &mut egui::Ui,
     name: &str,
@@ -1591,7 +1790,8 @@ fn theme_choice(
     accent: Color32,
     glow: Option<Color32>,
     selected: bool,
-) -> bool {
+    deletable: bool,
+) -> ThemePick {
     let resp = egui::Frame::group(ui.style())
         .inner_margin(egui::Margin::symmetric(10, 7))
         .corner_radius(egui::CornerRadius::same(10))
@@ -1613,7 +1813,47 @@ fn theme_choice(
             egui::StrokeKind::Inside,
         );
     }
-    resp.clicked()
+    // A small ✕ in the top-right corner removes an imported theme. It is added
+    // after the cell so it sits on top and captures clicks in its corner.
+    if deletable {
+        let center = egui::pos2(resp.rect.right() - 8.0, resp.rect.top() + 8.0);
+        let hit = egui::Rect::from_center_size(center, egui::vec2(16.0, 16.0));
+        let del = ui
+            .interact(hit, resp.id.with("del"), egui::Sense::click())
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .on_hover_text("Remove this imported theme");
+        let col = if del.hovered() {
+            Color32::from_rgb(0xe0, 0x6c, 0x6c)
+        } else {
+            Color32::from_gray(160)
+        };
+        let p = ui.painter();
+        p.circle_filled(center, 7.0, Color32::from_black_alpha(140));
+        let s = 3.0;
+        let stroke = egui::Stroke::new(1.5, col);
+        p.line_segment(
+            [
+                egui::pos2(center.x - s, center.y - s),
+                egui::pos2(center.x + s, center.y + s),
+            ],
+            stroke,
+        );
+        p.line_segment(
+            [
+                egui::pos2(center.x - s, center.y + s),
+                egui::pos2(center.x + s, center.y - s),
+            ],
+            stroke,
+        );
+        if del.clicked() {
+            return ThemePick::Delete;
+        }
+    }
+    if resp.clicked() {
+        ThemePick::Select
+    } else {
+        ThemePick::None
+    }
 }
 
 /// Paint a soft accent halo behind `rect` (mimics the web build's
@@ -1683,6 +1923,20 @@ fn tonal_button(ui: &mut egui::Ui, text: &str, accent: Color32, enabled: bool) -
 }
 
 /// A small readable pill badge with the first letter capitalized.
+/// Per-platform badge accent, matching the web build's `.badge-*` colors.
+fn platform_color(platform: &str) -> Color32 {
+    match platform.to_lowercase().as_str() {
+        "steam" => Color32::from_rgb(0x66, 0xc0, 0xf4),
+        "emulator" | "gog" => Color32::from_rgb(0xc0, 0x8c, 0xff),
+        "standalone" => Color32::from_rgb(0x5d, 0xcc, 0xa5),
+        "epic" => Color32::from_rgb(0xcf, 0xcf, 0xcf),
+        _ => Color32::from_rgb(0x9a, 0xa6, 0xb2), // manual / unknown
+    }
+}
+
+/// A rounded pill badge for a game's platform (Steam, Standalone, GOG, …),
+/// matching the web build: capitalized label, platform-colored text on a faint
+/// tint of the same color, with a full-pill radius.
 fn badge(ui: &mut egui::Ui, text: &str) {
     let mut label = String::new();
     let mut chars = text.chars();
@@ -1690,12 +1944,28 @@ fn badge(ui: &mut egui::Ui, text: &str) {
         label.extend(first.to_uppercase());
         label.push_str(chars.as_str());
     }
-    ui.label(
-        RichText::new(format!(" {label} "))
-            .small()
-            .strong()
-            .color(Color32::from_rgb(0xd6, 0xd2, 0xe6))
-            .background_color(Color32::from_rgb(0x39, 0x34, 0x4a)),
+    let color = platform_color(text);
+    let font = egui::FontId::new(11.0, egui::FontFamily::Proportional);
+    let galley = ui.fonts(|f| f.layout_no_wrap(label, font, color));
+    let (pad_x, pad_y) = (9.0, 3.0);
+    let size = egui::vec2(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0);
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let radius = egui::CornerRadius::same((rect.height() * 0.5) as u8);
+    // 15% fill / 28% border tints of the platform color (over the card).
+    let fill = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 38);
+    let border = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 72);
+    let painter = ui.painter();
+    painter.rect_filled(rect, radius, fill);
+    painter.rect_stroke(
+        rect,
+        radius,
+        egui::Stroke::new(1.0, border),
+        egui::StrokeKind::Inside,
+    );
+    painter.galley(
+        egui::pos2(rect.left() + pad_x, rect.center().y - galley.size().y * 0.5),
+        galley,
+        color,
     );
 }
 
@@ -1788,6 +2058,7 @@ impl eframe::App for App {
         self.render_status(ctx);
         self.render_library(ctx, &tx);
         self.render_settings(ctx, &tx);
+        self.render_themes_modal(ctx);
         self.render_add(ctx, &tx);
         self.render_game_settings(ctx, &tx);
         self.render_files(ctx);
