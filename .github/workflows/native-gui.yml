@@ -24,8 +24,12 @@ jobs:
             rust-targets: aarch64-apple-darwin x86_64-apple-darwin
           - name: windows-x64
             os: windows-latest
+            # Statically link the MSVC C runtime so the portable .exe needs no
+            # VC++ redistributable — only core Windows DLLs (no WebView2 either).
+            rustflags: -C target-feature=+crt-static
           - name: windows-arm64
             os: windows-11-arm
+            rustflags: -C target-feature=+crt-static
           - name: linux-x64
             os: ubuntu-22.04
           - name: linux-arm64
@@ -54,6 +58,8 @@ jobs:
 
       - name: Build (host target)
         if: matrix.rust-targets == ''
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
         run: cargo build --release -p gamesync-gui
 
       - name: Build universal macOS binary
@@ -71,7 +77,7 @@ jobs:
           mkdir -p out
           case "${{ matrix.name }}" in
             macos-universal) cp gamesync-gui-macos-universal "out/gamesync-gui-${{ matrix.name }}" ;;
-            windows-*)       cp target/release/gamesync-gui.exe "out/gamesync-gui-${{ matrix.name }}.exe" ;;
+            windows-*)       cp target/release/gamesync-gui.exe "out/gamesync-gui-${{ matrix.name }}-portable.exe" ;;
             *)               cp target/release/gamesync-gui "out/gamesync-gui-${{ matrix.name }}" ;;
           esac
           ls -l out
