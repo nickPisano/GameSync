@@ -12,3 +12,5 @@ repository.workspace = true
 [dependencies]
 gamesync-core = { path = "../gamesync-core" }
 eframe = "0.31"
+serde = { workspace = true }
+serde_json = { workspace = true }

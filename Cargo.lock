@@ -1946,6 +1946,8 @@ version = "0.2.5"
 dependencies = [
  "eframe",
  "gamesync-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
