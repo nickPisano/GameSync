@@ -1,10 +1,9 @@
 //! Built-in + imported custom themes, and their persistence.
 //!
-//! egui is themed through [`egui::Visuals`]; each theme maps to a base
-//! light/dark visuals plus an accent color tinting selection, links, and
-//! interactive widget strokes, and an optional background fill. The selection
-//! (and any imported custom theme) is persisted next to the engine's data dir
-//! as `gui-prefs.json`.
+//! Palettes are the exact values from the web build's `styles.css`
+//! (`[data-theme]`) / `theme.ts`. egui is themed through [`egui::Visuals`]; the
+//! chosen theme (and any imported custom one) is persisted next to the engine's
+//! data dir as `gui-prefs.json`.
 
 use std::path::Path;
 
@@ -26,6 +25,21 @@ pub enum Theme {
     Light,
     Forest,
     Grape,
+}
+
+/// One theme's colors (matches the web build's CSS variables).
+struct Palette {
+    bg: Color32,
+    panel: Color32,
+    card: Color32,
+    border: Color32,
+    text: Color32,
+    accent: Color32,
+    light: bool,
+}
+
+fn rgb(hex: u32) -> Color32 {
+    Color32::from_rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8)
 }
 
 impl Theme {
@@ -50,33 +64,56 @@ impl Theme {
     }
 
     pub fn accent(self) -> Color32 {
-        match self {
-            Theme::Midnight => Color32::from_rgb(0x8b, 0x5c, 0xf6),
-            Theme::Light => Color32::from_rgb(0x7c, 0x3a, 0xed),
-            Theme::Forest => Color32::from_rgb(0x4c, 0xc0, 0x5a),
-            Theme::Grape => Color32::from_rgb(0xc0, 0x6b, 0xff),
-        }
+        self.palette().accent
     }
 
-    fn background(self) -> Option<Color32> {
+    fn palette(self) -> Palette {
         match self {
-            Theme::Midnight => Some(Color32::from_rgb(0x14, 0x12, 0x1d)),
-            Theme::Forest => Some(Color32::from_rgb(0x0f, 0x1a, 0x13)),
-            Theme::Grape => Some(Color32::from_rgb(0x18, 0x12, 0x1f)),
-            Theme::Light => None,
+            Theme::Midnight => Palette {
+                bg: rgb(0x0f1216),
+                panel: rgb(0x171b21),
+                card: rgb(0x1e242c),
+                border: rgb(0x2a313b),
+                text: rgb(0xe6e9ee),
+                accent: rgb(0x4f8cff),
+                light: false,
+            },
+            Theme::Light => Palette {
+                bg: rgb(0xf6f7f9),
+                panel: rgb(0xffffff),
+                card: rgb(0xeef1f5),
+                border: rgb(0xd7dce3),
+                text: rgb(0x1b2027),
+                accent: rgb(0x2f6ae0),
+                light: true,
+            },
+            Theme::Forest => Palette {
+                bg: rgb(0x0e1512),
+                panel: rgb(0x14201a),
+                card: rgb(0x1b2b22),
+                border: rgb(0x26392e),
+                text: rgb(0xe3efe8),
+                accent: rgb(0x3fb37f),
+                light: false,
+            },
+            Theme::Grape => Palette {
+                bg: rgb(0x15121d),
+                panel: rgb(0x1e1830),
+                card: rgb(0x281f3d),
+                border: rgb(0x342a4e),
+                text: rgb(0xece8f5),
+                accent: rgb(0xb57bff),
+                light: false,
+            },
         }
     }
 
     pub fn visuals(self) -> Visuals {
-        themed_visuals(
-            matches!(self, Theme::Light),
-            self.accent(),
-            self.background(),
-        )
+        themed_visuals(&self.palette())
     }
 }
 
-/// An imported theme: just colors (egui can't do the web build's CSS effects).
+/// An imported theme: accent + background; panels/text are derived.
 #[derive(Clone)]
 pub struct Custom {
     pub name: String,
@@ -86,38 +123,49 @@ pub struct Custom {
 }
 
 impl Custom {
-    pub fn visuals(&self) -> Visuals {
-        themed_visuals(self.light, self.accent_color(), Some(self.bg_color()))
-    }
-
     pub fn accent_color(&self) -> Color32 {
         Color32::from_rgb(self.accent[0], self.accent[1], self.accent[2])
     }
 
-    fn bg_color(&self) -> Color32 {
-        Color32::from_rgb(self.bg[0], self.bg[1], self.bg[2])
+    fn palette(&self) -> Palette {
+        let bg = Color32::from_rgb(self.bg[0], self.bg[1], self.bg[2]);
+        Palette {
+            bg,
+            panel: bg.gamma_multiply(1.35),
+            card: bg.gamma_multiply(1.7),
+            border: bg.gamma_multiply(2.2),
+            text: if self.light {
+                rgb(0x1b2027)
+            } else {
+                rgb(0xe6e9ee)
+            },
+            accent: self.accent_color(),
+            light: self.light,
+        }
+    }
+
+    pub fn visuals(&self) -> Visuals {
+        themed_visuals(&self.palette())
     }
 }
 
-fn themed_visuals(light: bool, accent: Color32, bg: Option<Color32>) -> Visuals {
-    let mut v = if light {
+fn themed_visuals(p: &Palette) -> Visuals {
+    let mut v = if p.light {
         Visuals::light()
     } else {
         Visuals::dark()
     };
-    v.hyperlink_color = accent;
-    v.selection.bg_fill = accent.gamma_multiply(0.40);
-    v.selection.stroke.color = accent;
-    v.widgets.hovered.bg_stroke.color = accent;
-    v.widgets.active.bg_stroke.color = accent;
-    if let Some(bg) = bg {
-        v.panel_fill = bg;
-        v.window_fill = bg;
-        // Cards / inputs sit slightly above the panel.
-        v.extreme_bg_color = bg.gamma_multiply(0.7);
-        v.faint_bg_color = bg.gamma_multiply(1.5);
-    }
-    // Rounder widgets to match the web build.
+    v.panel_fill = p.bg;
+    v.window_fill = p.panel;
+    v.faint_bg_color = p.card;
+    v.extreme_bg_color = p.card;
+    v.override_text_color = Some(p.text);
+    v.hyperlink_color = p.accent;
+    v.selection.bg_fill = p.accent.gamma_multiply(0.40);
+    v.selection.stroke.color = p.accent;
+    v.widgets.noninteractive.bg_stroke.color = p.border;
+    v.widgets.hovered.bg_stroke.color = p.accent;
+    v.widgets.active.bg_stroke.color = p.accent;
     let cr = egui::CornerRadius::same(6);
     v.widgets.noninteractive.corner_radius = cr;
     v.widgets.inactive.corner_radius = cr;
@@ -159,9 +207,9 @@ pub fn parse_custom(json: &str) -> Option<Custom> {
         .as_deref()
         .and_then(hex3)
         .unwrap_or(if c.light {
-            [245, 245, 247]
+            [246, 247, 249]
         } else {
-            [18, 22, 31]
+            [15, 18, 22]
         });
     Some(Custom {
         name: c.name,

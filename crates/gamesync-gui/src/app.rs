@@ -443,12 +443,150 @@ impl App {
                             .inner_margin(egui::Margin::same(12))
                             .show(ui, |ui| {
                                 ui.set_min_width(ui.available_width());
+                                let full = ui.available_width();
+                                let left_w = (full - 360.0).max(160.0);
+                                let right_w = full - left_w;
                                 ui.horizontal(|ui| {
-                                    ui.label(RichText::new(g.name.as_str()).size(16.0).strong());
-                                    badge(ui, g.platform.as_str());
-                                    ui.with_layout(
+                                    // Left column: name/badge, path, status, links.
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(left_w, 0.0),
+                                        egui::Layout::top_down(egui::Align::Min),
+                                        |ui| {
+                                            ui.set_width(left_w);
+                                            ui.horizontal(|ui| {
+                                                ui.label(
+                                                    RichText::new(g.name.as_str())
+                                                        .size(16.0)
+                                                        .strong(),
+                                                );
+                                                badge(ui, g.platform.as_str());
+                                            });
+                                            ui.label(
+                                                RichText::new(g.save_root.display().to_string())
+                                                    .weak()
+                                                    .small(),
+                                            );
+                                            let last_str = last
+                                                .map(humanize_ago)
+                                                .unwrap_or_else(|| "never".to_string());
+                                            ui.label(
+                                                RichText::new(format!(
+                                                    "{count} versions · last backup {last_str}"
+                                                ))
+                                                .weak()
+                                                .small(),
+                                            );
+                                            if self.auto_sync.backup_on_exit {
+                                                ui.label(
+                                                    RichText::new(
+                                                        "Backs up automatically when it closes",
+                                                    )
+                                                    .weak()
+                                                    .small(),
+                                                );
+                                            }
+                                            if let Some((local, remote)) =
+                                                self.conflicts.get(&g.id).cloned()
+                                            {
+                                                ui.add_space(4.0);
+                                                ui.colored_label(
+                                                    Color32::from_rgb(220, 150, 60),
+                                                    format!(
+                                                        "Conflict: yours ({}) vs remote ({}).",
+                                                        short(&local),
+                                                        short(&remote)
+                                                    ),
+                                                );
+                                                ui.horizontal(|ui| {
+                                                    if ui.button("Keep mine").clicked() {
+                                                        let _ = tx.send(Cmd::Resolve {
+                                                            id: g.id.clone(),
+                                                            keep_local: true,
+                                                        });
+                                                        self.conflicts.remove(&g.id);
+                                                    }
+                                                    if ui.button("Take remote").clicked() {
+                                                        let _ = tx.send(Cmd::Resolve {
+                                                            id: g.id.clone(),
+                                                            keep_local: false,
+                                                        });
+                                                        self.conflicts.remove(&g.id);
+                                                    }
+                                                    if ui.button("Keep both").clicked() {
+                                                        let _ = tx.send(Cmd::Fork(g.id.clone()));
+                                                        self.conflicts.remove(&g.id);
+                                                    }
+                                                });
+                                            }
+                                            ui.add_space(2.0);
+                                            ui.horizontal(|ui| {
+                                                if ui.link("Rename").clicked() {
+                                                    self.renaming = Some(g.id.clone());
+                                                    self.rename_buf = g.name.clone();
+                                                }
+                                                ui.label(RichText::new("·").weak());
+                                                if ui.link("Redirect to synced folder").clicked() {
+                                                    self.gs_game = Some(g.id.clone());
+                                                    self.gs_extra = g
+                                                        .extra_roots
+                                                        .iter()
+                                                        .map(|p| p.display().to_string())
+                                                        .collect();
+                                                    self.gs_exe = g
+                                                        .install_dir
+                                                        .as_ref()
+                                                        .map(|p| p.display().to_string())
+                                                        .unwrap_or_default();
+                                                }
+                                                ui.label(RichText::new("·").weak());
+                                                if ui
+                                                    .add(
+                                                        egui::Label::new(
+                                                            RichText::new("Remove").color(
+                                                                Color32::from_rgb(0xe0, 0x6c, 0x6c),
+                                                            ),
+                                                        )
+                                                        .sense(egui::Sense::click()),
+                                                    )
+                                                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                                    .clicked()
+                                                {
+                                                    self.confirm_remove = Some(g.id.clone());
+                                                }
+                                            });
+                                        },
+                                    );
+                                    // Right column: toggle + action buttons, right-aligned.
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(right_w, 0.0),
                                         egui::Layout::right_to_left(egui::Align::Center),
                                         |ui| {
+                                            if tonal_button(
+                                                ui,
+                                                "Sync now",
+                                                accent,
+                                                self.remote.is_some(),
+                                            )
+                                            .clicked()
+                                            {
+                                                let _ = tx.send(Cmd::Sync(g.id.clone()));
+                                            }
+                                            if tonal_button(ui, "History", accent, count > 0)
+                                                .clicked()
+                                            {
+                                                self.show_history = Some(g.id.clone());
+                                                let _ = tx.send(Cmd::Versions(g.id.clone()));
+                                            }
+                                            if tonal_button(ui, "Files", accent, true).clicked() {
+                                                self.files_game = Some(g.id.clone());
+                                                self.files.clear();
+                                                self.files_for = None;
+                                                let _ = tx.send(Cmd::ListFiles(g.id.clone()));
+                                            }
+                                            if tonal_button(ui, "Back up", accent, true).clicked() {
+                                                let _ = tx.send(Cmd::Backup(g.id.clone()));
+                                            }
+                                            ui.label(RichText::new("Sync").small().weak());
                                             let mut sync = g.sync_enabled;
                                             if toggle_switch(ui, &mut sync, accent).changed() {
                                                 let _ = tx.send(Cmd::ToggleSync {
@@ -456,118 +594,8 @@ impl App {
                                                     enabled: sync,
                                                 });
                                             }
-                                            ui.label(RichText::new("Sync").small().weak());
                                         },
                                     );
-                                });
-                                ui.label(
-                                    RichText::new(g.save_root.display().to_string())
-                                        .weak()
-                                        .small(),
-                                );
-                                let last_str = last
-                                    .map(humanize_ago)
-                                    .unwrap_or_else(|| "never".to_string());
-                                ui.label(
-                                    RichText::new(format!(
-                                        "{count} versions · last backup {last_str}"
-                                    ))
-                                    .weak()
-                                    .small(),
-                                );
-                                if self.auto_sync.backup_on_exit {
-                                    ui.label(
-                                        RichText::new("Backs up automatically when it closes")
-                                            .weak()
-                                            .small(),
-                                    );
-                                }
-                                ui.add_space(6.0);
-                                ui.horizontal(|ui| {
-                                    if tonal_button(ui, "Back up", accent, true).clicked() {
-                                        let _ = tx.send(Cmd::Backup(g.id.clone()));
-                                    }
-                                    if tonal_button(ui, "Files", accent, true).clicked() {
-                                        self.files_game = Some(g.id.clone());
-                                        self.files.clear();
-                                        self.files_for = None;
-                                        let _ = tx.send(Cmd::ListFiles(g.id.clone()));
-                                    }
-                                    if tonal_button(ui, "History", accent, count > 0).clicked() {
-                                        self.show_history = Some(g.id.clone());
-                                        let _ = tx.send(Cmd::Versions(g.id.clone()));
-                                    }
-                                    if tonal_button(ui, "Sync now", accent, self.remote.is_some())
-                                        .clicked()
-                                    {
-                                        let _ = tx.send(Cmd::Sync(g.id.clone()));
-                                    }
-                                });
-                                if let Some((local, remote)) = self.conflicts.get(&g.id).cloned() {
-                                    ui.add_space(4.0);
-                                    ui.colored_label(
-                                        Color32::from_rgb(220, 150, 60),
-                                        format!(
-                                            "Conflict: yours ({}) vs remote ({}).",
-                                            short(&local),
-                                            short(&remote)
-                                        ),
-                                    );
-                                    ui.horizontal(|ui| {
-                                        if ui.button("Keep mine").clicked() {
-                                            let _ = tx.send(Cmd::Resolve {
-                                                id: g.id.clone(),
-                                                keep_local: true,
-                                            });
-                                            self.conflicts.remove(&g.id);
-                                        }
-                                        if ui.button("Take remote").clicked() {
-                                            let _ = tx.send(Cmd::Resolve {
-                                                id: g.id.clone(),
-                                                keep_local: false,
-                                            });
-                                            self.conflicts.remove(&g.id);
-                                        }
-                                        if ui.button("Keep both").clicked() {
-                                            let _ = tx.send(Cmd::Fork(g.id.clone()));
-                                            self.conflicts.remove(&g.id);
-                                        }
-                                    });
-                                }
-                                ui.add_space(2.0);
-                                ui.horizontal(|ui| {
-                                    if ui.link("Rename").clicked() {
-                                        self.renaming = Some(g.id.clone());
-                                        self.rename_buf = g.name.clone();
-                                    }
-                                    ui.label(RichText::new("·").weak());
-                                    if ui.link("Redirect to synced folder").clicked() {
-                                        self.gs_game = Some(g.id.clone());
-                                        self.gs_extra = g
-                                            .extra_roots
-                                            .iter()
-                                            .map(|p| p.display().to_string())
-                                            .collect();
-                                        self.gs_exe = g
-                                            .install_dir
-                                            .as_ref()
-                                            .map(|p| p.display().to_string())
-                                            .unwrap_or_default();
-                                    }
-                                    ui.label(RichText::new("·").weak());
-                                    if ui
-                                        .add(
-                                            egui::Label::new(
-                                                RichText::new("Remove")
-                                                    .color(Color32::from_rgb(0xe0, 0x6c, 0x6c)),
-                                            )
-                                            .sense(egui::Sense::click()),
-                                        )
-                                        .on_hover_cursor(egui::CursorIcon::PointingHand)
-                                        .clicked()
-                                    {
-                                        self.confirm_remove = Some(g.id.clone());
-                                    }
                                 });
                             });
                         ui.add_space(8.0);
