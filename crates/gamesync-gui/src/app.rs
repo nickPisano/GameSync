@@ -537,10 +537,14 @@ impl App {
                                 .fill(card_fill)
                                 .inner_margin(egui::Margin::same(16))
                                 .show(ui, |ui| {
-                                    ui.set_min_width(ui.available_width());
+                                    // Split the row into a left column + a fixed-width right
+                                    // column, accounting for the horizontal item spacing so the
+                                    // total never exceeds the available width (which would feed
+                                    // back and push the buttons further right each frame).
+                                    let gap = ui.spacing().item_spacing.x;
                                     let full = ui.available_width();
-                                    let left_w = (full - 360.0).max(160.0);
-                                    let right_w = full - left_w;
+                                    let right_w = 360.0_f32.min((full - gap - 120.0).max(120.0));
+                                    let left_w = full - right_w - gap;
                                     ui.horizontal(|ui| {
                                         // Left column: name/badge, path, status, links.
                                         ui.allocate_ui_with_layout(
