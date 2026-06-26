@@ -490,7 +490,8 @@ impl App {
                         ui.add(
                             egui::TextEdit::singleline(&mut self.search)
                                 .hint_text("Filter…")
-                                .desired_width(180.0),
+                                .desired_width(176.0)
+                                .margin(egui::Margin::symmetric(10, 8)),
                         );
                         egui::ComboBox::from_id_salt("sort")
                             .selected_text(self.sort_key.label())
