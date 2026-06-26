@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/gamesync-core", "crates/gamesync-cli", "src-tauri"]
+members = ["crates/gamesync-core", "crates/gamesync-cli", "crates/gamesync-gui", "src-tauri"]
 
 [workspace.package]
 version = "0.2.5"
