@@ -34,6 +34,13 @@ enum SortKey {
 }
 
 impl SortKey {
+    const ALL: [SortKey; 4] = [
+        SortKey::Name,
+        SortKey::Recent,
+        SortKey::Versions,
+        SortKey::Platform,
+    ];
+
     fn label(self) -> &'static str {
         match self {
             SortKey::Name => "Name (A–Z)",
@@ -487,28 +494,15 @@ impl App {
                         );
                         egui::ComboBox::from_id_salt("sort")
                             .selected_text(self.sort_key.label())
-                            .width(170.0)
+                            .width(176.0)
                             .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut self.sort_key,
-                                    SortKey::Name,
-                                    "Name (A–Z)",
-                                );
-                                ui.selectable_value(
-                                    &mut self.sort_key,
-                                    SortKey::Recent,
-                                    "Recently backed up",
-                                );
-                                ui.selectable_value(
-                                    &mut self.sort_key,
-                                    SortKey::Versions,
-                                    "Most versions",
-                                );
-                                ui.selectable_value(
-                                    &mut self.sort_key,
-                                    SortKey::Platform,
-                                    "Platform",
-                                );
+                                // Roomier, full-width rows for a cleaner popup.
+                                ui.spacing_mut().item_spacing.y = 3.0;
+                                ui.spacing_mut().button_padding = egui::vec2(10.0, 7.0);
+                                ui.set_min_width(176.0);
+                                for key in SortKey::ALL {
+                                    ui.selectable_value(&mut self.sort_key, key, key.label());
+                                }
                             });
                         ui.label(RichText::new("Sort").small().weak());
                     });
