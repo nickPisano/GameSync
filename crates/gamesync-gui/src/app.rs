@@ -544,7 +544,7 @@ impl App {
                                     // back and push the buttons further right each frame).
                                     let gap = ui.spacing().item_spacing.x;
                                     let full = ui.available_width();
-                                    let right_w = 450.0_f32.min((full - gap - 120.0).max(120.0));
+                                    let right_w = 370.0_f32.min((full - gap - 120.0).max(120.0));
                                     let left_w = full - right_w - gap;
                                     ui.horizontal(|ui| {
                                         // Left column: name/badge, path, status, links.
