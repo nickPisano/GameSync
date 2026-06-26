@@ -93,6 +93,11 @@ impl Theme {
         self.palette().accent
     }
 
+    /// Background color, used to draw the theme's preview swatch.
+    pub fn bg(self) -> Color32 {
+        self.palette().bg
+    }
+
     fn palette(self) -> Palette {
         match self {
             Theme::Midnight => Palette {
@@ -162,6 +167,9 @@ pub struct Custom {
     pub bubbles: bool,
     #[serde(default)]
     pub bubble_color: Option<[u8; 3]>,
+    /// Accent glow on primary buttons (web build's `effects.glow`). None = off.
+    #[serde(default)]
+    pub glow: Option<[u8; 3]>,
 }
 
 impl Custom {
@@ -173,9 +181,20 @@ impl Custom {
         c32(self.bg)
     }
 
-    /// Whether this theme paints a gradient and/or bubbles behind the UI.
+    /// Whether this theme paints a gradient and/or bubbles behind the UI (which
+    /// requires transparent panels). A glow alone does not.
     pub fn is_fancy(&self) -> bool {
         self.gradient.len() >= 2 || self.bubbles
+    }
+
+    /// Whether this theme carries any effect — used as the "has effects" glow
+    /// cue on its preview swatch.
+    pub fn has_effects(&self) -> bool {
+        self.is_fancy() || self.glow.is_some()
+    }
+
+    pub fn glow_color(&self) -> Option<Color32> {
+        self.glow.map(c32)
     }
 
     pub fn gradient_colors(&self) -> Vec<Color32> {
@@ -292,6 +311,8 @@ struct ImportEffects {
     bubble_color: Option<String>,
     #[serde(default)]
     highlight: Option<String>,
+    #[serde(default)]
+    glow: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -331,6 +352,7 @@ pub fn parse_custom(json: &str) -> Option<Custom> {
     let mut gradient = Vec::new();
     let mut bubbles = false;
     let mut bubble_color = None;
+    let mut glow = None;
     if let Some(fx) = &imp.effects {
         if let Some(g) = &fx.gradient {
             gradient = g.iter().filter_map(|s| hex3(s)).collect();
@@ -344,6 +366,8 @@ pub fn parse_custom(json: &str) -> Option<Custom> {
             .as_deref()
             .and_then(hex3)
             .or(fx.highlight.as_deref().and_then(hex3));
+        // Glow is opt-in: only an explicit `effects.glow` color turns it on.
+        glow = fx.glow.as_deref().and_then(hex3);
     }
 
     Some(Custom {
@@ -358,6 +382,7 @@ pub fn parse_custom(json: &str) -> Option<Custom> {
         gradient,
         bubbles,
         bubble_color,
+        glow,
     })
 }
 

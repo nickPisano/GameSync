@@ -210,6 +210,15 @@ impl App {
         }
     }
 
+    /// The active theme's primary-button glow color, if it enables `effects.glow`.
+    fn glow(&self) -> Option<Color32> {
+        if self.use_custom {
+            self.custom_theme.as_ref().and_then(|c| c.glow_color())
+        } else {
+            None
+        }
+    }
+
     fn drain_events(&mut self) {
         while let Ok(evt) = self.handle.rx.try_recv() {
             match evt {
@@ -324,6 +333,7 @@ impl App {
 
     fn render_topbar(&mut self, ctx: &egui::Context, tx: &Sender<Cmd>) {
         let accent = self.accent();
+        let glow = self.glow();
         egui::TopBottomPanel::top("top")
             .frame(panel_frame(ctx, 13))
             .show(ctx, |ui| {
@@ -359,14 +369,26 @@ impl App {
                         if ui.button("Scan").clicked() {
                             let _ = tx.send(Cmd::Scan);
                         }
-                        if ui
-                            .add_enabled(
-                                self.remote.is_some(),
-                                egui::Button::new(RichText::new("Sync all").color(Color32::WHITE))
-                                    .fill(accent),
-                            )
-                            .clicked()
-                        {
+                        let enabled = self.remote.is_some();
+                        // Reserve halo slots before the button so they sit behind it.
+                        let slots: Vec<egui::layers::ShapeIdx> = if enabled && glow.is_some() {
+                            (0..GLOW_LAYERS.len())
+                                .map(|_| ui.painter().add(egui::Shape::Noop))
+                                .collect()
+                        } else {
+                            Vec::new()
+                        };
+                        let sync = ui.add_enabled(
+                            enabled,
+                            egui::Button::new(RichText::new("Sync all").color(Color32::WHITE))
+                                .fill(accent),
+                        );
+                        if let Some(g) = glow {
+                            if enabled {
+                                fill_glow(ui.painter(), &slots, sync.rect, g);
+                            }
+                        }
+                        if sync.clicked() {
                             let _ = tx.send(Cmd::SyncAll);
                         }
                     });
@@ -376,22 +398,36 @@ impl App {
 
     fn render_remote_bar(&mut self, ctx: &egui::Context, tx: &Sender<Cmd>) {
         let accent = self.accent();
+        let glow = self.glow();
         egui::TopBottomPanel::top("remote")
             .frame(panel_frame(ctx, 11))
             .show(ctx, |ui| {
+                // Match the library bar's control height so the row has a known
+                // height; otherwise the short "REMOTE"/"not set" labels are
+                // placed before the taller buttons and get pinned to the top
+                // instead of vertically centering.
+                ui.spacing_mut().interact_size.y = 30.0;
+                ui.spacing_mut().button_padding.y = 6.0;
                 ui.horizontal(|ui| {
+                    ui.set_min_height(30.0);
                     ui.label(RichText::new("REMOTE").small().weak());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(
-                            RichText::new(if self.remote.is_some() {
-                                "set"
+                        ui.set_min_height(30.0);
+                        if self.remote.is_some() {
+                            // Green check + "set", matching the web build's --ok
+                            // (#3fb950 on dark themes, #1a7f37 on light). The
+                            // check is hand-painted because egui's default font
+                            // has no checkmark glyph.
+                            let ok = if ui.visuals().dark_mode {
+                                Color32::from_rgb(0x3f, 0xb9, 0x50)
                             } else {
-                                "not set"
-                            })
-                            .small()
-                            .weak(),
-                        );
-                        if primary_button(ui, "Save", accent).clicked() {
+                                Color32::from_rgb(0x1a, 0x7f, 0x37)
+                            };
+                            ok_set_indicator(ui, ok);
+                        } else {
+                            ui.label(RichText::new("not set").small().weak());
+                        }
+                        if primary_button(ui, "Save", accent, glow).clicked() {
                             let _ = tx.send(Cmd::SetRemote(self.remote_buf.trim().to_string()));
                         }
                         if ui.button("Browse…").clicked() {
@@ -553,6 +589,10 @@ impl App {
                                             egui::Layout::top_down(egui::Align::Min),
                                             |ui| {
                                                 ui.set_width(left_w);
+                                                // Tighten the line spacing to match the
+                                                // web build's compact card (path/meta
+                                                // lines are 4–5px apart, not egui's 6px).
+                                                ui.spacing_mut().item_spacing.y = 4.0;
                                                 ui.horizontal(|ui| {
                                                     ui.label(
                                                         RichText::new(g.name.as_str())
@@ -621,7 +661,7 @@ impl App {
                                                         }
                                                     });
                                                 }
-                                                ui.add_space(2.0);
+                                                ui.add_space(1.0);
                                                 ui.horizontal(|ui| {
                                                     if ui.link("Rename").clicked() {
                                                         self.renaming = Some(g.id.clone());
@@ -640,6 +680,29 @@ impl App {
                                                             .as_ref()
                                                             .map(|p| p.display().to_string())
                                                             .unwrap_or_default();
+                                                    }
+                                                    ui.label(RichText::new("·").weak());
+                                                    if ui
+                                                        .link("Redirect to synced folder")
+                                                        .on_hover_text(
+                                                            "Move this save folder into a synced \
+                                                             folder (e.g. OneDrive) and leave a \
+                                                             symlink",
+                                                        )
+                                                        .clicked()
+                                                    {
+                                                        if let Some(p) = rfd::FileDialog::new()
+                                                            .set_title(
+                                                                "Choose a synced folder (e.g. \
+                                                                 OneDrive or Google Drive)",
+                                                            )
+                                                            .pick_folder()
+                                                        {
+                                                            let _ = tx.send(Cmd::Redirect {
+                                                                id: g.id.clone(),
+                                                                target: p,
+                                                            });
+                                                        }
                                                     }
                                                     ui.label(RichText::new("·").weak());
                                                     if ui
@@ -719,6 +782,7 @@ impl App {
             return;
         };
         let accent = self.accent();
+        let glow = self.glow();
         let mut open = true;
         egui::Window::new("History")
             .open(&mut open)
@@ -737,7 +801,7 @@ impl App {
                         .show(ui, |ui| {
                             for v in &self.versions {
                                 ui.horizontal(|ui| {
-                                    if primary_button(ui, "Restore", accent).clicked() {
+                                    if primary_button(ui, "Restore", accent, glow).clicked() {
                                         let _ = tx.send(Cmd::Restore {
                                             game: game.clone(),
                                             version: v.version_id.clone(),
@@ -815,22 +879,28 @@ impl App {
             .default_width(440.0)
             .show(ctx, |ui| {
                 ui.heading("Appearance");
+                ui.add_space(4.0);
+                // Pull the custom theme's swatch data out first so the closure
+                // below can still mutate `self` when one is clicked.
+                let custom_info = self.custom_theme.as_ref().map(|c| {
+                    let glow = if c.has_effects() {
+                        Some(c.glow_color().unwrap_or_else(|| c.accent_color()))
+                    } else {
+                        None
+                    };
+                    (c.name.clone(), c.bg_color(), c.accent_color(), glow)
+                });
                 ui.horizontal_wrapped(|ui| {
                     for t in Theme::ALL {
-                        if ui
-                            .selectable_label(!self.use_custom && self.theme == t, t.name())
-                            .clicked()
-                        {
+                        let selected = !self.use_custom && self.theme == t;
+                        if theme_choice(ui, t.name(), t.bg(), t.accent(), None, selected) {
                             self.theme = t;
                             self.use_custom = false;
                             self.theme_dirty = true;
                         }
                     }
-                    if let Some(c) = &self.custom_theme {
-                        if ui
-                            .selectable_label(self.use_custom, c.name.as_str())
-                            .clicked()
-                        {
+                    if let Some((name, bg, accent_c, glow)) = &custom_info {
+                        if theme_choice(ui, name, *bg, *accent_c, *glow, self.use_custom) {
                             self.use_custom = true;
                             self.theme_dirty = true;
                         }
@@ -1463,9 +1533,144 @@ fn reveal(path: &str) {
     }
 }
 
-/// A filled accent button with white text.
-fn primary_button(ui: &mut egui::Ui, text: &str, accent: Color32) -> egui::Response {
-    ui.add(egui::Button::new(RichText::new(text).color(Color32::WHITE)).fill(accent))
+/// A filled accent button with white text. When `glow` is set (a theme's
+/// `effects.glow`), a soft halo is painted behind it.
+fn primary_button(
+    ui: &mut egui::Ui,
+    text: &str,
+    accent: Color32,
+    glow: Option<Color32>,
+) -> egui::Response {
+    // Reserve halo shape slots *before* the button so they paint underneath it.
+    let slots: Vec<egui::layers::ShapeIdx> = if glow.is_some() {
+        (0..GLOW_LAYERS.len())
+            .map(|_| ui.painter().add(egui::Shape::Noop))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let resp = ui.add(egui::Button::new(RichText::new(text).color(Color32::WHITE)).fill(accent));
+    if let Some(g) = glow {
+        fill_glow(ui.painter(), &slots, resp.rect, g);
+    }
+    resp
+}
+
+/// (outward growth, alpha) for each ring of the primary-button / swatch glow.
+const GLOW_LAYERS: [(f32, u8); 4] = [(10.0, 16), (7.0, 26), (4.0, 40), (2.0, 60)];
+
+/// Draw a theme preview swatch — the bg color with a small accent dot, plus an
+/// optional glow halo (the "has effects" cue), mirroring the web build.
+fn theme_swatch(ui: &mut egui::Ui, bg: Color32, accent: Color32, glow: Option<Color32>) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(44.0, 28.0), egui::Sense::hover());
+    if let Some(g) = glow {
+        paint_glow(ui.painter(), rect, g);
+    }
+    let cr = egui::CornerRadius::same(7);
+    let painter = ui.painter();
+    painter.rect_filled(rect, cr, bg);
+    painter.rect_stroke(
+        rect,
+        cr,
+        egui::Stroke::new(1.0, Color32::from_gray(127).gamma_multiply(0.5)),
+        egui::StrokeKind::Inside,
+    );
+    painter.circle_filled(
+        egui::pos2(rect.right() - 9.0, rect.bottom() - 9.0),
+        5.0,
+        accent,
+    );
+}
+
+/// A clickable theme cell: a preview swatch + the theme name. The selected cell
+/// gets an accent ring. Returns true when clicked.
+fn theme_choice(
+    ui: &mut egui::Ui,
+    name: &str,
+    bg: Color32,
+    accent: Color32,
+    glow: Option<Color32>,
+    selected: bool,
+) -> bool {
+    let resp = egui::Frame::group(ui.style())
+        .inner_margin(egui::Margin::symmetric(10, 7))
+        .corner_radius(egui::CornerRadius::same(10))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                theme_swatch(ui, bg, accent, glow);
+                ui.add_space(3.0);
+                ui.label(RichText::new(name).strong());
+            });
+        })
+        .response
+        .interact(egui::Sense::click())
+        .on_hover_cursor(egui::CursorIcon::PointingHand);
+    if selected {
+        ui.painter().rect_stroke(
+            resp.rect,
+            egui::CornerRadius::same(10),
+            egui::Stroke::new(2.0, accent),
+            egui::StrokeKind::Inside,
+        );
+    }
+    resp.clicked()
+}
+
+/// Paint a soft accent halo behind `rect` (mimics the web build's
+/// `box-shadow: 0 0 14px` glow), drawing largest/faintest ring first.
+fn paint_glow(painter: &egui::Painter, rect: egui::Rect, color: Color32) {
+    for (grow, alpha) in GLOW_LAYERS {
+        let c = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha);
+        let r = egui::CornerRadius::same((8.0 + grow) as u8);
+        painter.rect_filled(rect.expand(grow), r, c);
+    }
+}
+
+/// Like [`paint_glow`] but into pre-reserved shape slots (so the halo lands
+/// behind a widget that was added after the slots were reserved).
+fn fill_glow(
+    painter: &egui::Painter,
+    slots: &[egui::layers::ShapeIdx],
+    rect: egui::Rect,
+    color: Color32,
+) {
+    for (idx, (grow, alpha)) in slots.iter().zip(GLOW_LAYERS) {
+        let c = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha);
+        let r = egui::CornerRadius::same((8.0 + grow) as u8);
+        painter.set(*idx, egui::Shape::rect_filled(rect.expand(grow), r, c));
+    }
+}
+
+/// A small green "✓ set" remote-status indicator. The checkmark is hand-painted
+/// (egui's default font has no check glyph) and the whole thing is sized to the
+/// 30px row height so it vertically centers with the buttons beside it.
+fn ok_set_indicator(ui: &mut egui::Ui, color: Color32) {
+    let font = egui::TextStyle::Small.resolve(ui.style());
+    let galley = ui
+        .ctx()
+        .fonts(|f| f.layout_no_wrap("set".to_owned(), font, color));
+    let check_w = 12.0;
+    let gap = 4.0;
+    let w = check_w + gap + galley.size().x;
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(w, 30.0), egui::Sense::hover());
+    // Checkmark on the left, drawn as two strokes inside an 11px box.
+    let s = 11.0;
+    let b = egui::Rect::from_min_size(
+        egui::pos2(rect.left(), rect.center().y - s / 2.0),
+        egui::vec2(s, s),
+    );
+    let stroke = egui::Stroke::new(2.0, color);
+    let p1 = egui::pos2(b.left() + s * 0.10, b.top() + s * 0.52);
+    let p2 = egui::pos2(b.left() + s * 0.40, b.top() + s * 0.80);
+    let p3 = egui::pos2(b.left() + s * 0.92, b.top() + s * 0.18);
+    ui.painter().line_segment([p1, p2], stroke);
+    ui.painter().line_segment([p2, p3], stroke);
+    // "set" text to the right of the checkmark, vertically centered.
+    let text_pos = egui::pos2(
+        rect.left() + check_w + gap,
+        rect.center().y - galley.size().y / 2.0,
+    );
+    ui.painter().galley(text_pos, galley, color);
 }
 
 /// A tonal button: accent text, faint accent fill, thin accent border. Greyed
