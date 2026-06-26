@@ -25,6 +25,25 @@ enum ToastKind {
     Error,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SortKey {
+    Name,
+    Recent,
+    Versions,
+    Platform,
+}
+
+impl SortKey {
+    fn label(self) -> &'static str {
+        match self {
+            SortKey::Name => "Name (A–Z)",
+            SortKey::Recent => "Recently backed up",
+            SortKey::Versions => "Most versions",
+            SortKey::Platform => "Platform",
+        }
+    }
+}
+
 struct Toast {
     msg: String,
     kind: ToastKind,
@@ -56,6 +75,7 @@ pub struct App {
     theme: Theme,
     theme_dirty: bool,
     search: String,
+    sort_key: SortKey,
     busy: u32,
     toasts: Vec<Toast>,
 
@@ -139,6 +159,7 @@ impl App {
             theme: loaded.theme,
             theme_dirty: false,
             search: String::new(),
+            sort_key: SortKey::Recent,
             busy: 0,
             toasts: Vec::new(),
             show_settings: false,
@@ -417,6 +438,39 @@ impl App {
 
     fn render_library(&mut self, ctx: &egui::Context, tx: &Sender<Cmd>) {
         let accent = self.accent();
+        // Sorted order over the games (matches the web build's sort options).
+        let mut order: Vec<usize> = (0..self.games.len()).collect();
+        let sort_key = self.sort_key;
+        order.sort_by(|&a, &b| {
+            let ga = &self.games[a];
+            let gb = &self.games[b];
+            match sort_key {
+                SortKey::Recent => {
+                    let la = self
+                        .summaries
+                        .get(&ga.id)
+                        .and_then(|s| s.1)
+                        .unwrap_or(i64::MIN);
+                    let lb = self
+                        .summaries
+                        .get(&gb.id)
+                        .and_then(|s| s.1)
+                        .unwrap_or(i64::MIN);
+                    lb.cmp(&la)
+                }
+                SortKey::Versions => {
+                    let va = self.summaries.get(&ga.id).map(|s| s.0).unwrap_or(0);
+                    let vb = self.summaries.get(&gb.id).map(|s| s.0).unwrap_or(0);
+                    vb.cmp(&va)
+                }
+                SortKey::Platform => ga
+                    .platform
+                    .as_str()
+                    .cmp(gb.platform.as_str())
+                    .then_with(|| ga.name.to_lowercase().cmp(&gb.name.to_lowercase())),
+                SortKey::Name => ga.name.to_lowercase().cmp(&gb.name.to_lowercase()),
+            }
+        });
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
@@ -425,8 +479,26 @@ impl App {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.search)
                             .hint_text("Filter…")
-                            .desired_width(200.0),
+                            .desired_width(180.0),
                     );
+                    egui::ComboBox::from_id_salt("sort")
+                        .selected_text(self.sort_key.label())
+                        .width(170.0)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut self.sort_key, SortKey::Name, "Name (A–Z)");
+                            ui.selectable_value(
+                                &mut self.sort_key,
+                                SortKey::Recent,
+                                "Recently backed up",
+                            );
+                            ui.selectable_value(
+                                &mut self.sort_key,
+                                SortKey::Versions,
+                                "Most versions",
+                            );
+                            ui.selectable_value(&mut self.sort_key, SortKey::Platform, "Platform");
+                        });
+                    ui.label(RichText::new("Sort").small().weak());
                 });
             });
             ui.add_space(4.0);
@@ -442,7 +514,8 @@ impl App {
                             ui.label("Click Scan to detect installed games, or Add game.");
                         });
                     }
-                    for g in &self.games {
+                    for &gi in &order {
+                        let g = &self.games[gi];
                         if !q.is_empty() && !g.name.to_lowercase().contains(&q) {
                             continue;
                         }
@@ -534,7 +607,7 @@ impl App {
                                                     self.rename_buf = g.name.clone();
                                                 }
                                                 ui.label(RichText::new("·").weak());
-                                                if ui.link("Redirect to synced folder").clicked() {
+                                                if ui.link("Settings").clicked() {
                                                     self.gs_game = Some(g.id.clone());
                                                     self.gs_extra = g
                                                         .extra_roots
