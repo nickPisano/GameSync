@@ -451,18 +451,16 @@ impl App {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.set_min_height(30.0);
                         if self.remote.is_some() {
-                            // Green check + "set", matching the web build's --ok
-                            // (#3fb950 on dark themes, #1a7f37 on light). The
-                            // check is hand-painted because egui's default font
-                            // has no checkmark glyph.
+                            // Green "set" pill, matching the web build's --ok
+                            // (#3fb950 on dark themes, #1a7f37 on light).
                             let ok = if ui.visuals().dark_mode {
                                 Color32::from_rgb(0x3f, 0xb9, 0x50)
                             } else {
                                 Color32::from_rgb(0x1a, 0x7f, 0x37)
                             };
-                            ok_set_indicator(ui, ok);
+                            pill_badge(ui, "set", ok);
                         } else {
-                            ui.label(RichText::new("not set").small().weak());
+                            pill_badge(ui, "not set", Color32::from_rgb(0x9a, 0xa6, 0xb2));
                         }
                         if primary_button(ui, "Save", accent, glow).clicked() {
                             let _ = tx.send(Cmd::SetRemote(self.remote_buf.trim().to_string()));
@@ -616,7 +614,7 @@ impl App {
                             }
                             let (count, last) =
                                 self.summaries.get(&g.id).copied().unwrap_or((0, None));
-                            egui::Frame::group(ui.style())
+                            let card = egui::Frame::group(ui.style())
                                 .fill(card_fill)
                                 .corner_radius(egui::CornerRadius::same(15))
                                 .inner_margin(egui::Margin::same(16))
@@ -836,6 +834,14 @@ impl App {
                                         },
                                     );
                                 });
+                            // Hover affordance: an accent border that draws itself
+                            // around the card's outer edge on hover (and retracts
+                            // on mouse-out). No fill — just the edge animates.
+                            let card_rect = card.response.rect;
+                            let anim_id = egui::Id::new(("card_hover", g.id.as_str()));
+                            let hovered = ui.rect_contains_pointer(card_rect);
+                            let t = ui.ctx().animate_bool_with_time(anim_id, hovered, 0.25);
+                            paint_border_trace(ui.painter(), card_rect, accent, t);
                             ui.add_space(8.0);
                         }
                     });
@@ -2150,6 +2156,52 @@ fn theme_choice(
     }
 }
 
+/// Draw an accent border around `rect`, revealed left→right by a vertical sweep
+/// at `x = left + width * t`: every part of the rounded outline to the left of
+/// the sweep is drawn, so on hover the border fills in from the left edge across
+/// to the right (and retracts as `t` falls back to 0).
+fn paint_border_trace(painter: &egui::Painter, rect: egui::Rect, color: Color32, t: f32) {
+    if t <= 0.0 {
+        return;
+    }
+    const R: f32 = 15.0;
+    fn arc(pts: &mut Vec<egui::Pos2>, cx: f32, cy: f32, a0: f32, a1: f32) {
+        for i in 0..=5 {
+            let a = (a0 + (a1 - a0) * (i as f32 / 5.0)).to_radians();
+            pts.push(egui::pos2(cx + R * a.cos(), cy + R * a.sin()));
+        }
+    }
+    let (l, r, top, b) = (rect.left(), rect.right(), rect.top(), rect.bottom());
+    let mut pts = vec![egui::pos2(l + R, top), egui::pos2(r - R, top)];
+    arc(&mut pts, r - R, top + R, -90.0, 0.0); // top-right
+    pts.push(egui::pos2(r, b - R));
+    arc(&mut pts, r - R, b - R, 0.0, 90.0); // bottom-right
+    pts.push(egui::pos2(l + R, b));
+    arc(&mut pts, l + R, b - R, 90.0, 180.0); // bottom-left
+    pts.push(egui::pos2(l, top + R));
+    arc(&mut pts, l + R, top + R, 180.0, 270.0); // top-left
+    pts.push(egui::pos2(l + R, top)); // close
+
+    let xr = rect.left() + rect.width() * t.clamp(0.0, 1.0);
+    let stroke = egui::Stroke::new(2.0, color);
+    for w in pts.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        match (a.x <= xr, b.x <= xr) {
+            (true, true) => {
+                painter.line_segment([a, b], stroke);
+            }
+            (false, false) => {}
+            // Straddles the sweep line: draw only the part left of it.
+            _ => {
+                let f = (xr - a.x) / (b.x - a.x);
+                let mid = a + (b - a) * f;
+                let inside = if a.x <= xr { a } else { b };
+                painter.line_segment([inside, mid], stroke);
+            }
+        }
+    }
+}
+
 /// Paint a soft accent halo behind `rect` (mimics the web build's
 /// `box-shadow: 0 0 14px` glow), drawing largest/faintest ring first.
 fn paint_glow(painter: &egui::Painter, rect: egui::Rect, color: Color32) {
@@ -2178,33 +2230,34 @@ fn fill_glow(
 /// A small green "✓ set" remote-status indicator. The checkmark is hand-painted
 /// (egui's default font has no check glyph) and the whole thing is sized to the
 /// 30px row height so it vertically centers with the buttons beside it.
-fn ok_set_indicator(ui: &mut egui::Ui, color: Color32) {
-    let font = egui::TextStyle::Small.resolve(ui.style());
+/// A small rounded pill badge: `text` in `color` on a faint tint of it (the
+/// same style as the platform badges). Vertically centered in a 30px row.
+fn pill_badge(ui: &mut egui::Ui, text: &str, color: Color32) {
+    let font = egui::FontId::new(11.0, egui::FontFamily::Proportional);
     let galley = ui
         .ctx()
-        .fonts(|f| f.layout_no_wrap("set".to_owned(), font, color));
-    let check_w = 12.0;
-    let gap = 4.0;
-    let w = check_w + gap + galley.size().x;
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(w, 30.0), egui::Sense::hover());
-    // Checkmark on the left, drawn as two strokes inside an 11px box.
-    let s = 11.0;
-    let b = egui::Rect::from_min_size(
-        egui::pos2(rect.left(), rect.center().y - s / 2.0),
-        egui::vec2(s, s),
+        .fonts(|f| f.layout_no_wrap(text.to_owned(), font, color));
+    let (pad_x, pad_y) = (9.0, 3.0);
+    let pill = egui::vec2(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0);
+    // Reserve the row height so the pill centers with the buttons beside it.
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(pill.x, 30.0), egui::Sense::hover());
+    let brect = egui::Rect::from_center_size(rect.center(), pill);
+    let radius = egui::CornerRadius::same((pill.y * 0.5) as u8);
+    let fill = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 38);
+    let border = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 72);
+    let painter = ui.painter();
+    painter.rect_filled(brect, radius, fill);
+    painter.rect_stroke(
+        brect,
+        radius,
+        egui::Stroke::new(1.0, border),
+        egui::StrokeKind::Inside,
     );
-    let stroke = egui::Stroke::new(2.0, color);
-    let p1 = egui::pos2(b.left() + s * 0.10, b.top() + s * 0.52);
-    let p2 = egui::pos2(b.left() + s * 0.40, b.top() + s * 0.80);
-    let p3 = egui::pos2(b.left() + s * 0.92, b.top() + s * 0.18);
-    ui.painter().line_segment([p1, p2], stroke);
-    ui.painter().line_segment([p2, p3], stroke);
-    // "set" text to the right of the checkmark, vertically centered.
-    let text_pos = egui::pos2(
-        rect.left() + check_w + gap,
-        rect.center().y - galley.size().y / 2.0,
+    painter.galley(
+        egui::pos2(brect.left() + pad_x, brect.center().y - galley.size().y * 0.5),
+        galley,
+        color,
     );
-    ui.painter().galley(text_pos, galley, color);
 }
 
 /// A tonal button: accent text, faint accent fill, thin accent border. Greyed
