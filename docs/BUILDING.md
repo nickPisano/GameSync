@@ -16,11 +16,32 @@ bare executable *is* the "portable" build — copy it anywhere and run it.
 | **Windows** | `target/release/gamesync-gui.exe` | No WebView2 or VC++ redistributable needed (CRT is statically linked in CI). |
 | **Linux** | `target/release/gamesync-gui` | Dynamically links system GTK/X11 libs only. |
 
-> Native OS installers (`.dmg`/`.msi`/`.deb`/`.AppImage`) were produced by Tauri
-> and are no longer built. If you want them back, add a Rust bundler such as
-> [`cargo-bundle`](https://github.com/burtonageo/cargo-bundle) or
-> [`cargo-dist`](https://github.com/axodotdev/cargo-dist) — it doesn't change the
-> app, only the packaging.
+## Native installers (`cargo-packager`)
+
+OS installers are built from that same binary with
+[`cargo-packager`](https://github.com/crabnebula-dev/cargo-packager) — a
+framework-agnostic bundler (no Tauri, no webview). The bundle config lives in
+`[package.metadata.packager]` in `crates/gamesync-gui/Cargo.toml` (product name,
+identifier, icons in `crates/gamesync-gui/assets/`).
+
+```sh
+cargo install cargo-packager --locked     # one time
+cargo build --release -p gamesync-gui     # build the binary first
+cargo packager --release -p gamesync-gui -f dmg   # then package
+```
+
+`-f` selects the format(s) for the current OS; the bundles land next to the
+binary in `target/release/`:
+
+| OS | `-f` formats | Output |
+| --- | --- | --- |
+| **macOS** | `app`, `dmg` | `GameSync.app`, `GameSync_<ver>_<arch>.dmg` |
+| **Windows** | `wix`, `nsis` | `…_en-US.msi`, `…-setup.exe` (cargo-packager auto-downloads WiX / NSIS) |
+| **Linux** | `deb`, `appimage` | `…_<arch>.deb`, `…_<arch>.AppImage` (AppImage needs `libfuse2`) |
+
+> `.rpm` is the one old Tauri format cargo-packager can't produce. Fedora/RHEL
+> users can run the `.AppImage`, or add `cargo-generate-rpm` if a native `.rpm`
+> is needed.
 
 ## Targets & architectures
 
@@ -98,9 +119,10 @@ app-level signing is required to run them.
 ## CI (automated releases)
 
 [`.github/workflows/release.yml`](../.github/workflows/release.yml) runs on a
-`v*` tag push, builds all five targets in parallel (`cargo build --release -p
-gamesync-gui`), and attaches the raw/portable binaries to a **draft** GitHub
-release via `softprops/action-gh-release`. To ship:
+`v*` tag push, builds all five targets in parallel, packages each with
+cargo-packager (macOS `.dmg`; Windows `.msi` + setup `.exe`; Linux `.deb` +
+`.AppImage`), and attaches the installers **plus** a raw/portable binary to a
+**draft** GitHub release via `softprops/action-gh-release`. To ship:
 
 1. Bump `version` in the workspace `Cargo.toml`, commit, then
    `git tag vX.Y.Z && git push origin vX.Y.Z`.

@@ -21,3 +21,20 @@ rfd = "0.15"
 tray-icon = "0.19"
 # Decode the brand PNG for the topbar logo (png only; same version eframe uses).
 image = { version = "0.25", default-features = false, features = ["png"] }
+
+# ── Native installers via `cargo packager` ────────────────────────────────────
+# Builds OS installers from the self-contained binary (no webview, no Tauri).
+# Usage: build the binary first, then run the packager:
+#   cargo build --release -p gamesync-gui
+#   cargo packager --release -p gamesync-gui -f dmg   # (or wix/nsis/deb/appimage)
+# The release CI builds every format per OS and attaches them to the release.
+[package.metadata.packager]
+product-name = "GameSync"
+identifier = "com.gamesync.app"
+description = "Back up and sync your game saves safely."
+long-description = "GameSync snapshots and replicates game save folders for games without reliable cloud saves — version history, safe restores, optional encryption, and folder/rclone/LAN sync."
+homepage = "https://github.com/nickPisano/GameSync"
+authors = ["nickPisano"]
+category = "Utility"
+# One icon per platform: .ico (Windows), .icns (macOS), .png (Linux).
+icons = ["assets/icon.ico", "assets/AppIcon.icns", "assets/brand.png"]

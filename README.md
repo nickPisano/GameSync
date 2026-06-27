@@ -37,34 +37,39 @@ compile it yourself? See [Build from source](#build-from-source) below.
 ### Download a prebuilt build (recommended)
 
 **1. Get the file for your OS.** Open the [**Releases**](https://github.com/nickPisano/GameSync/releases)
-page, expand the latest version's **Assets**, and download the **portable**
-build for your system (`<ver>` is the version number in the filename, e.g.
-`0.3.0`). Each is a single, self-contained executable — no installer, and no
-WebView runtime:
+page, expand the latest version's **Assets**, and download either an
+**installer** or a **portable** build (`<ver>` is the version number in the
+filename, e.g. `0.3.0`). None of them need a WebView runtime — the app is a
+native window:
 
-| Your system | Download |
-| --- | --- |
-| **macOS** (Intel *or* Apple Silicon) | `GameSync_<ver>_macos-universal` |
-| **Windows x64** | `GameSync_<ver>_windows-x64-portable.exe` |
-| **Windows arm64** | `GameSync_<ver>_windows-arm64-portable.exe` |
-| **Linux x64** | `GameSync_<ver>_linux-x64` |
-| **Linux arm64** | `GameSync_<ver>_linux-arm64` |
+| Your system | Installer | Portable (no install — just run) |
+| --- | --- | --- |
+| **macOS** (Intel *or* Apple Silicon) | `GameSync_<ver>_universal.dmg` | the **GameSync.app** inside that `.dmg`, or `GameSync_<ver>_macos-universal` |
+| **Windows x64** | `GameSync_<ver>_x64_en-US.msi` *or* `…_x64-setup.exe` | `GameSync_<ver>_windows-x64-portable.exe` |
+| **Windows arm64** | `GameSync_<ver>_arm64_en-US.msi` *or* `…_arm64-setup.exe` | `GameSync_<ver>_windows-arm64-portable.exe` |
+| **Linux x64** | `GameSync_<ver>_amd64.deb` *or* `…_x86_64.AppImage` | `GameSync_<ver>_linux-x64` |
+| **Linux arm64** | `GameSync_<ver>_arm64.deb` *or* `…_aarch64.AppImage` | `GameSync_<ver>_linux-arm64` |
 
-> **Which architecture?** The macOS build is *universal* (runs on both). On
-> **Windows**: Settings → System → About → *System type*. On **Linux**: run
-> `uname -m` (`x86_64` → x64, `aarch64` → arm64).
+> **Which architecture?** The macOS build is *universal* (runs on both), so just
+> take the `.dmg`. On **Windows**: Settings → System → About → *System type*. On
+> **Linux**: run `uname -m` (`x86_64` → x64, `aarch64` → arm64). *(Fedora/RHEL:
+> use the `.AppImage` — no `.rpm` is published.)*
 
-**2. Run it:**
+**2. Install or run it:**
 
-- **macOS / Linux** — make it executable, then launch:
-  `chmod +x GameSync_<ver>_* && ./GameSync_<ver>_*`.
-- **Windows** — just double-click the `.exe`. No install, and no WebView2
-  Runtime needed.
+- **macOS** — open the `.dmg`, drag **GameSync** into **Applications**, launch
+  it. (Or run the portable binary: `chmod +x GameSync_<ver>_macos-universal && ./GameSync_<ver>_macos-universal`.)
+- **Windows** — run the `.msi` or `-setup.exe` to install, **or** just
+  double-click the `-portable.exe` to run with no install. No WebView2 Runtime
+  needed.
+- **Linux** — installer: `sudo apt install ./GameSync_<ver>_amd64.deb`. Portable:
+  `chmod +x GameSync_<ver>_x86_64.AppImage && ./GameSync_<ver>_x86_64.AppImage`
+  (or the bare `GameSync_<ver>_linux-x64` binary).
 
 > **First run shows an "unidentified developer" warning.** The builds aren't
 > code-signed yet, so the OS blocks them by default. It's safe to allow:
-> - **macOS:** right-click the app → **Open** → **Open** (just the first time),
->   or run `xattr -dr com.apple.quarantine ./GameSync_<ver>_macos-universal`.
+> - **macOS:** right-click **GameSync** → **Open** → **Open** (just the first
+>   time), or run `xattr -dr com.apple.quarantine /Applications/GameSync.app`.
 > - **Windows:** on the SmartScreen dialog, click **More info → Run anyway**.
 
 **3.** The app opens — continue to [First-time setup](#tutorial-first-time-setup).
