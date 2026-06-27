@@ -2409,7 +2409,7 @@ fn title_with_badge(ui: &mut egui::Ui, name: &str, platform: &str) {
     // glassy fill that lets the card show through, a slightly stronger tinted
     // border, and a gently rounded-rect shape.
     let radius = egui::CornerRadius::same(7);
-    let fill = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 64);
+    let fill = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 10);
     let border = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 110);
     ui.painter().rect_filled(brect, radius, fill);
     ui.painter().rect_stroke(
