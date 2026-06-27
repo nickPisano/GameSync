@@ -242,6 +242,29 @@ impl App {
         }
     }
 
+    /// Whether the active theme paints a gradient/bubbles background.
+    fn fancy_theme(&self) -> bool {
+        self.use_custom && self.custom_theme.as_ref().is_some_and(|c| c.is_fancy())
+    }
+
+    /// Frame for the top/remote bars: always a solid, opaque fill so the
+    /// gradient/bubbles background does not show through them. Fancy themes make
+    /// `panel_fill` transparent, so use the opaque panel color (`window_fill`)
+    /// for them; other themes already have an opaque `panel_fill`.
+    fn bar_frame(&self, ctx: &egui::Context, v: i8) -> egui::Frame {
+        let fill = if self.fancy_theme() {
+            ctx.style().visuals.window_fill
+        } else {
+            ctx.style().visuals.panel_fill
+        };
+        egui::Frame::default().fill(fill).inner_margin(egui::Margin {
+            left: 22,
+            right: 22,
+            top: v,
+            bottom: v,
+        })
+    }
+
     /// The active theme's primary-button glow color, if it enables `effects.glow`.
     fn glow(&self) -> Option<Color32> {
         if self.use_custom {
@@ -368,7 +391,7 @@ impl App {
         let accent = self.accent();
         let glow = self.glow();
         egui::TopBottomPanel::top("top")
-            .frame(panel_frame(ctx, 13))
+            .frame(self.bar_frame(ctx, 13))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     if let Some(tex) = &self.brand {
@@ -437,7 +460,7 @@ impl App {
         let accent = self.accent();
         let glow = self.glow();
         egui::TopBottomPanel::top("remote")
-            .frame(panel_frame(ctx, 11))
+            .frame(self.bar_frame(ctx, 11))
             .show(ctx, |ui| {
                 // Match the library bar's control height so the row has a known
                 // height; otherwise the short "REMOTE"/"not set" labels are
