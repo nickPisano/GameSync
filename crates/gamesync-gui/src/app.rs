@@ -83,6 +83,8 @@ pub struct App {
     theme_dirty: bool,
     search: String,
     sort_key: SortKey,
+    /// Whether the library controls row (count + sort + filter) is shown.
+    show_filters: bool,
     busy: u32,
     toasts: Vec<Toast>,
 
@@ -179,6 +181,7 @@ impl App {
             theme_dirty: false,
             search: String::new(),
             sort_key: SortKey::Recent,
+            show_filters: false,
             busy: 0,
             toasts: Vec::new(),
             show_settings: false,
@@ -413,6 +416,8 @@ impl App {
                         if sync.clicked() {
                             let _ = tx.send(Cmd::SyncAll);
                         }
+                        // Toggle the library controls row (game count + sort + filter).
+                        ui.toggle_value(&mut self.show_filters, "Filters");
                     });
                 });
             });
@@ -460,6 +465,10 @@ impl App {
                         ui.add(
                             egui::TextEdit::singleline(&mut self.remote_buf)
                                 .desired_width(f32::INFINITY)
+                                // Taller inner margin so the field matches the
+                                // 30px buttons and fills the bar vertically.
+                                .margin(egui::Margin::symmetric(8, 7))
+                                .vertical_align(egui::Align::Center)
                                 .hint_text(
                                     "Path to a shared/cloud folder (e.g. ~/Dropbox/GameSync)",
                                 ),
@@ -542,36 +551,42 @@ impl App {
         egui::CentralPanel::default()
             .frame(panel_frame(ctx, 20))
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("Games ({})", self.games.len())).strong());
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        // Force the dropdown + filter to the same height. The
-                        // combo button height is driven by button_padding, so cap
-                        // that here and size the text field to match exactly.
-                        ui.spacing_mut().interact_size.y = 30.0;
-                        ui.spacing_mut().button_padding.y = 6.0;
-                        ui.add_sized(
-                            egui::vec2(176.0, 30.0),
-                            egui::TextEdit::singleline(&mut self.search)
-                                .hint_text("Filter…")
-                                .vertical_align(egui::Align::Center),
+                // The game count + sort + filter live behind the topbar "Filters"
+                // toggle, so the library view is uncluttered by default.
+                if self.show_filters {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            RichText::new(format!("Games ({})", self.games.len())).strong(),
                         );
-                        egui::ComboBox::from_id_salt("sort")
-                            .selected_text(self.sort_key.label())
-                            .width(176.0)
-                            .show_ui(ui, |ui| {
-                                // Roomier, full-width rows for a cleaner popup.
-                                ui.spacing_mut().item_spacing.y = 3.0;
-                                ui.spacing_mut().button_padding = egui::vec2(10.0, 7.0);
-                                ui.set_min_width(176.0);
-                                for key in SortKey::ALL {
-                                    ui.selectable_value(&mut self.sort_key, key, key.label());
-                                }
-                            });
-                        ui.label(RichText::new("Sort").small().weak());
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            // Force the dropdown + filter to the same height. The
+                            // combo button height is driven by button_padding, so
+                            // cap that here and size the text field to match.
+                            ui.spacing_mut().interact_size.y = 30.0;
+                            ui.spacing_mut().button_padding.y = 6.0;
+                            ui.add_sized(
+                                egui::vec2(176.0, 30.0),
+                                egui::TextEdit::singleline(&mut self.search)
+                                    .hint_text("Filter…")
+                                    .vertical_align(egui::Align::Center),
+                            );
+                            egui::ComboBox::from_id_salt("sort")
+                                .selected_text(self.sort_key.label())
+                                .width(176.0)
+                                .show_ui(ui, |ui| {
+                                    // Roomier, full-width rows for a cleaner popup.
+                                    ui.spacing_mut().item_spacing.y = 3.0;
+                                    ui.spacing_mut().button_padding = egui::vec2(10.0, 7.0);
+                                    ui.set_min_width(176.0);
+                                    for key in SortKey::ALL {
+                                        ui.selectable_value(&mut self.sort_key, key, key.label());
+                                    }
+                                });
+                            ui.label(RichText::new("Sort").small().weak());
+                        });
                     });
-                });
-                ui.add_space(4.0);
+                    ui.add_space(4.0);
+                }
                 let q = self.search.trim().to_lowercase();
                 let card_fill = ui.visuals().faint_bg_color;
                 egui::ScrollArea::vertical()
@@ -685,11 +700,6 @@ impl App {
                                                             }
                                                         });
                                                     }
-                                                    // Height of the main info (everything above the
-                                                    // secondary links row) — the action buttons are
-                                                    // centered against this, not the full card, so
-                                                    // they read as centered rather than sitting low.
-                                                    let main_h = ui.min_rect().height();
                                                     ui.add_space(1.0);
                                                     ui.horizontal(|ui| {
                                                         if ui.link("Rename").clicked() {
@@ -754,18 +764,17 @@ impl App {
                                                                 Some(g.id.clone());
                                                         }
                                                     });
-                                                    main_h
                                                 },
                                             );
-                                            // Right column: toggle + action buttons, right-aligned,
-                                            // vertically centered against the main info (so they sit
-                                            // at the visual middle rather than below it).
-                                            let main_h = left_col.inner;
+                                            // Right column: toggle + action buttons, right-aligned
+                                            // and centered against the *full* card height so they
+                                            // sit at the card's vertical middle.
+                                            let row_h = left_col.response.rect.height();
                                             ui.allocate_ui_with_layout(
-                                                egui::vec2(right_w, main_h),
+                                                egui::vec2(right_w, row_h),
                                                 egui::Layout::right_to_left(egui::Align::Center),
                                                 |ui| {
-                                                    ui.set_min_height(main_h);
+                                                    ui.set_min_height(row_h);
                                                     if tonal_button(
                                                         ui,
                                                         "Sync now",
