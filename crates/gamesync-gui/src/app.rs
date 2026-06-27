@@ -433,7 +433,7 @@ impl App {
                         let enabled = self.remote.is_some();
                         // Reserve halo slots before the button so they sit behind it.
                         let slots: Vec<egui::layers::ShapeIdx> = if enabled && glow.is_some() {
-                            (0..GLOW_LAYERS.len())
+                            (0..GLOW_N)
                                 .map(|_| ui.painter().add(egui::Shape::Noop))
                                 .collect()
                         } else {
@@ -2021,7 +2021,7 @@ fn primary_button(
 ) -> egui::Response {
     // Reserve halo shape slots *before* the button so they paint underneath it.
     let slots: Vec<egui::layers::ShapeIdx> = if glow.is_some() {
-        (0..GLOW_LAYERS.len())
+        (0..GLOW_N)
             .map(|_| ui.painter().add(egui::Shape::Noop))
             .collect()
     } else {
@@ -2034,8 +2034,27 @@ fn primary_button(
     resp
 }
 
-/// (outward growth, alpha) for each ring of the primary-button / swatch glow.
-const GLOW_LAYERS: [(f32, u8); 4] = [(10.0, 16), (7.0, 26), (4.0, 40), (2.0, 60)];
+/// Number of rings in the primary-button / swatch glow. Many thin layers with a
+/// smooth alpha falloff composite into a continuous gradient halo instead of the
+/// few visible bands a handful of solid rings produced.
+const GLOW_N: usize = 24;
+
+/// (outward growth, alpha) for each ring of the glow, outermost/faintest first.
+/// Each ring shrinks and brightens toward the button, so stacking them builds a
+/// soft gradient that's strongest at the edge and fades smoothly outward.
+fn glow_layers() -> [(f32, u8); GLOW_N] {
+    const MAX_GROW: f32 = 13.0;
+    let mut out = [(0.0_f32, 0_u8); GLOW_N];
+    for (i, layer) in out.iter_mut().enumerate() {
+        // t: ~0 at the outermost (largest, faintest) ring → ~1 nearest the button.
+        let t = (i as f32 + 1.0) / GLOW_N as f32;
+        let grow = MAX_GROW * (1.0 - t);
+        // Quadratic build-up: very faint out wide, ramping toward the edge.
+        let alpha = (4.0 + 11.0 * t * t).round() as u8;
+        *layer = (grow, alpha);
+    }
+    out
+}
 
 /// Draw a theme preview swatch — the bg color with a small accent dot, plus an
 /// Paint a theme preview swatch (bg + accent dot, optional glow) into `rect`.
@@ -2239,7 +2258,7 @@ fn paint_border_trace(painter: &egui::Painter, rect: egui::Rect, color: Color32,
 /// Paint a soft accent halo behind `rect` (mimics the web build's
 /// `box-shadow: 0 0 14px` glow), drawing largest/faintest ring first.
 fn paint_glow(painter: &egui::Painter, rect: egui::Rect, color: Color32) {
-    for (grow, alpha) in GLOW_LAYERS {
+    for (grow, alpha) in glow_layers() {
         let c = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha);
         let r = egui::CornerRadius::same((8.0 + grow) as u8);
         painter.rect_filled(rect.expand(grow), r, c);
@@ -2254,7 +2273,7 @@ fn fill_glow(
     rect: egui::Rect,
     color: Color32,
 ) {
-    for (idx, (grow, alpha)) in slots.iter().zip(GLOW_LAYERS) {
+    for (idx, (grow, alpha)) in slots.iter().zip(glow_layers()) {
         let c = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha);
         let r = egui::CornerRadius::same((8.0 + grow) as u8);
         painter.set(*idx, egui::Shape::rect_filled(rect.expand(grow), r, c));
