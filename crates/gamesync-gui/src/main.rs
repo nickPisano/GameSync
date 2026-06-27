@@ -17,11 +17,17 @@ mod worker;
 use eframe::egui;
 
 fn main() -> eframe::Result<()> {
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_inner_size([1040.0, 680.0])
+        .with_min_inner_size([720.0, 460.0])
+        .with_title("GameSync");
+    // App / taskbar icon (Windows + Linux; on macOS the Dock icon comes from
+    // the .app bundle's .icns instead).
+    if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!("../assets/brand.png")) {
+        viewport = viewport.with_icon(icon);
+    }
     let native_options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1040.0, 680.0])
-            .with_min_inner_size([720.0, 460.0])
-            .with_title("GameSync"),
+        viewport,
         ..Default::default()
     };
     eframe::run_native(

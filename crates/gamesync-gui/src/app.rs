@@ -934,179 +934,179 @@ impl App {
                 egui::ScrollArea::vertical()
                     .auto_shrink([false; 2])
                     .show(ui, |ui| {
-                    ui.heading("Appearance");
-                    ui.add_space(4.0);
-                    // A plain horizontal row keeps the swatches on one baseline;
-                    // horizontal_wrapped staggers them vertically.
-                    ui.horizontal(|ui| {
-                        for t in Theme::ALL {
-                            let selected = !self.use_custom && self.theme == t;
-                            if let ThemePick::Select = theme_choice(
-                                ui,
-                                t.name(),
-                                t.bg(),
-                                t.accent(),
-                                None,
-                                selected,
-                                false,
-                            ) {
-                                self.theme = t;
-                                self.use_custom = false;
-                                self.theme_dirty = true;
+                        ui.heading("Appearance");
+                        ui.add_space(4.0);
+                        // Top-align so every swatch cell shares one baseline (a
+                        // plain/centered row lets them drift down to the left).
+                        ui.horizontal_top(|ui| {
+                            for t in Theme::ALL {
+                                let selected = !self.use_custom && self.theme == t;
+                                if let ThemePick::Select = theme_choice(
+                                    ui,
+                                    t.name(),
+                                    t.bg(),
+                                    t.accent(),
+                                    None,
+                                    selected,
+                                    false,
+                                ) {
+                                    self.theme = t;
+                                    self.use_custom = false;
+                                    self.theme_dirty = true;
+                                }
+                            }
+                        });
+                        ui.add_space(4.0);
+                        ui.horizontal(|ui| {
+                            if ui.button("Show all themes…").clicked() {
+                                self.show_themes = true;
+                            }
+                            ui.label(
+                                RichText::new("Custom imports & the full gallery")
+                                    .weak()
+                                    .small(),
+                            );
+                        });
+
+                        ui.separator();
+                        ui.heading("Sync");
+                        let mut s = self.auto_sync;
+                        let mut changed = false;
+                        changed |= ui
+                            .checkbox(&mut s.enabled, "Automatic background sync")
+                            .changed();
+                        ui.horizontal(|ui| {
+                            ui.label("Every");
+                            changed |= ui
+                                .add(egui::DragValue::new(&mut s.interval_min).range(1..=1440))
+                                .changed();
+                            ui.label("minutes");
+                        });
+                        changed |= ui
+                            .checkbox(
+                                &mut s.backup_on_exit,
+                                "Back up automatically when a game closes",
+                            )
+                            .changed();
+                        if changed {
+                            let _ = tx.send(Cmd::SetAutoSync(s));
+                        }
+
+                        ui.separator();
+                        ui.heading("Storage");
+                        let mut comp = self.compression;
+                        if ui
+                            .checkbox(&mut comp, "Compress stored saves (LZMA2)")
+                            .changed()
+                        {
+                            let _ = tx.send(Cmd::SetCompression(comp));
+                        }
+                        match &self.storage {
+                            Some(st) => {
+                                ui.label(format!(
+                                    "{} objects · {} on disk{}",
+                                    st.total_objects,
+                                    human_size(st.total_bytes),
+                                    if st.compressed { " (compressed)" } else { "" }
+                                ));
+                            }
+                            None => {
+                                ui.label(RichText::new("Calculating usage…").weak());
                             }
                         }
-                    });
-                    ui.add_space(4.0);
-                    ui.horizontal(|ui| {
-                        if ui.button("Show all themes…").clicked() {
-                            self.show_themes = true;
+                        if ui.button("Verify integrity").clicked() {
+                            let _ = tx.send(Cmd::Verify);
                         }
-                        ui.label(
-                            RichText::new("Custom imports & the full gallery")
-                                .weak()
-                                .small(),
-                        );
-                    });
 
-                    ui.separator();
-                    ui.heading("Sync");
-                    let mut s = self.auto_sync;
-                    let mut changed = false;
-                    changed |= ui
-                        .checkbox(&mut s.enabled, "Automatic background sync")
-                        .changed();
-                    ui.horizontal(|ui| {
-                        ui.label("Every");
-                        changed |= ui
-                            .add(egui::DragValue::new(&mut s.interval_min).range(1..=1440))
-                            .changed();
-                        ui.label("minutes");
-                    });
-                    changed |= ui
-                        .checkbox(
-                            &mut s.backup_on_exit,
-                            "Back up automatically when a game closes",
-                        )
-                        .changed();
-                    if changed {
-                        let _ = tx.send(Cmd::SetAutoSync(s));
-                    }
-
-                    ui.separator();
-                    ui.heading("Storage");
-                    let mut comp = self.compression;
-                    if ui
-                        .checkbox(&mut comp, "Compress stored saves (LZMA2)")
-                        .changed()
-                    {
-                        let _ = tx.send(Cmd::SetCompression(comp));
-                    }
-                    match &self.storage {
-                        Some(st) => {
-                            ui.label(format!(
-                                "{} objects · {} on disk{}",
-                                st.total_objects,
-                                human_size(st.total_bytes),
-                                if st.compressed { " (compressed)" } else { "" }
-                            ));
+                        ui.separator();
+                        ui.heading("Game detection");
+                        ui.label(format!(
+                            "{} games in the detection database",
+                            self.known_games
+                        ));
+                        if ui.button("Update game list").clicked() {
+                            let _ = tx.send(Cmd::UpdateList);
                         }
-                        None => {
-                            ui.label(RichText::new("Calculating usage…").weak());
-                        }
-                    }
-                    if ui.button("Verify integrity").clicked() {
-                        let _ = tx.send(Cmd::Verify);
-                    }
 
-                    ui.separator();
-                    ui.heading("Game detection");
-                    ui.label(format!(
-                        "{} games in the detection database",
-                        self.known_games
-                    ));
-                    if ui.button("Update game list").clicked() {
-                        let _ = tx.send(Cmd::UpdateList);
-                    }
-
-                    ui.separator();
-                    ui.heading("Encryption");
-                    if self.encrypted {
-                        ui.label("Enabled (zero-knowledge).");
-                        if ui.button("Disable encryption…").clicked() {
-                            self.show_disable_encryption = true;
-                        }
-                    } else {
-                        ui.label(
+                        ui.separator();
+                        ui.heading("Encryption");
+                        if self.encrypted {
+                            ui.label("Enabled (zero-knowledge).");
+                            if ui.button("Disable encryption…").clicked() {
+                                self.show_disable_encryption = true;
+                            }
+                        } else {
+                            ui.label(
                         RichText::new(
                             "Encrypt all stored saves. Only possible on an empty store; you'll \
                              get a one-time recovery key.",
                         )
                         .weak(),
                     );
-                        if ui.button("Enable encryption…").clicked() {
-                            self.enc_pass.clear();
-                            self.enc_confirm.clear();
-                            self.show_encryption = true;
+                            if ui.button("Enable encryption…").clicked() {
+                                self.enc_pass.clear();
+                                self.enc_confirm.clear();
+                                self.show_encryption = true;
+                            }
                         }
-                    }
 
-                    ui.separator();
-                    ui.heading("LAN");
-                    // Host: share this device's saves so other devices can sync to it.
-                    if let Some(spec) = self.lan_hosting.clone() {
-                        ui.label(
-                            RichText::new("Hosting on this network. On another device, paste:")
-                                .weak(),
-                        );
-                        ui.horizontal(|ui| {
-                            // Editable view of a per-frame clone — selectable to
-                            // copy, but edits are discarded (reset each frame).
-                            let mut display = spec.clone();
-                            ui.add(
-                                egui::TextEdit::singleline(&mut display)
-                                    .desired_width(260.0)
-                                    .font(egui::TextStyle::Monospace),
+                        ui.separator();
+                        ui.heading("LAN");
+                        // Host: share this device's saves so other devices can sync to it.
+                        if let Some(spec) = self.lan_hosting.clone() {
+                            ui.label(
+                                RichText::new("Hosting on this network. On another device, paste:")
+                                    .weak(),
                             );
-                            if ui.button("Copy").clicked() {
-                                ui.ctx().copy_text(spec.clone());
+                            ui.horizontal(|ui| {
+                                // Editable view of a per-frame clone — selectable to
+                                // copy, but edits are discarded (reset each frame).
+                                let mut display = spec.clone();
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut display)
+                                        .desired_width(260.0)
+                                        .font(egui::TextStyle::Monospace),
+                                );
+                                if ui.button("Copy").clicked() {
+                                    ui.ctx().copy_text(spec.clone());
+                                }
+                            });
+                            if ui.button("Stop hosting").clicked() {
+                                let _ = tx.send(Cmd::StopLanHost);
+                            }
+                        } else if ui.button("Host on this network").clicked() {
+                            let _ = tx.send(Cmd::StartLanHost);
+                        }
+                        ui.add_space(4.0);
+                        // Find: discover other devices already hosting.
+                        ui.horizontal(|ui| {
+                            if ui.button("Find LAN hosts").clicked() {
+                                let _ = tx.send(Cmd::DiscoverLan);
+                            }
+                            if !self.lan_hosts.is_empty() {
+                                ui.label(
+                                    RichText::new(format!("{} found", self.lan_hosts.len())).weak(),
+                                );
                             }
                         });
-                        if ui.button("Stop hosting").clicked() {
-                            let _ = tx.send(Cmd::StopLanHost);
+                        for (name, endpoint) in &self.lan_hosts {
+                            ui.horizontal(|ui| {
+                                if ui.small_button("Use").clicked() {
+                                    self.remote_buf = format!("lan:@{endpoint}");
+                                }
+                                ui.label(format!("{name} — {endpoint}"));
+                            });
                         }
-                    } else if ui.button("Host on this network").clicked() {
-                        let _ = tx.send(Cmd::StartLanHost);
-                    }
-                    ui.add_space(4.0);
-                    // Find: discover other devices already hosting.
-                    ui.horizontal(|ui| {
-                        if ui.button("Find LAN hosts").clicked() {
-                            let _ = tx.send(Cmd::DiscoverLan);
+
+                        ui.separator();
+                        ui.heading("Updates");
+                        if ui.button("Check for updates").clicked() {
+                            let _ = tx.send(Cmd::CheckUpdate);
                         }
-                        if !self.lan_hosts.is_empty() {
-                            ui.label(
-                                RichText::new(format!("{} found", self.lan_hosts.len())).weak(),
-                            );
+                        if let Some(s) = &self.update_status {
+                            ui.label(s.as_str());
                         }
                     });
-                    for (name, endpoint) in &self.lan_hosts {
-                        ui.horizontal(|ui| {
-                            if ui.small_button("Use").clicked() {
-                                self.remote_buf = format!("lan:@{endpoint}");
-                            }
-                            ui.label(format!("{name} — {endpoint}"));
-                        });
-                    }
-
-                    ui.separator();
-                    ui.heading("Updates");
-                    if ui.button("Check for updates").clicked() {
-                        let _ = tx.send(Cmd::CheckUpdate);
-                    }
-                    if let Some(s) = &self.update_status {
-                        ui.label(s.as_str());
-                    }
-                });
             });
         self.show_settings = open;
     }
@@ -1161,7 +1161,7 @@ impl App {
                     });
                 }
                 for row in entries.chunks(4) {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_top(|ui| {
                         for entry in row {
                             match entry {
                                 Entry::Builtin(t) => {
@@ -1940,13 +1940,18 @@ const GLOW_LAYERS: [(f32, u8); 4] = [(10.0, 16), (7.0, 26), (4.0, 40), (2.0, 60)
 
 /// Draw a theme preview swatch — the bg color with a small accent dot, plus an
 /// optional glow halo (the "has effects" cue), mirroring the web build.
-fn theme_swatch(ui: &mut egui::Ui, bg: Color32, accent: Color32, glow: Option<Color32>) {
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(44.0, 28.0), egui::Sense::hover());
+/// Paint a theme preview swatch (bg + accent dot, optional glow) into `rect`.
+fn paint_swatch(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    bg: Color32,
+    accent: Color32,
+    glow: Option<Color32>,
+) {
     if let Some(g) = glow {
-        paint_glow(ui.painter(), rect, g);
+        paint_glow(painter, rect, g);
     }
     let cr = egui::CornerRadius::same(7);
-    let painter = ui.painter();
     painter.rect_filled(rect, cr, bg);
     painter.rect_stroke(
         rect,
@@ -1961,8 +1966,6 @@ fn theme_swatch(ui: &mut egui::Ui, bg: Color32, accent: Color32, glow: Option<Co
     );
 }
 
-/// A clickable theme cell: a preview swatch + the theme name. The selected cell
-/// gets an accent ring. Returns true when clicked.
 /// Result of clicking a theme cell.
 enum ThemePick {
     None,
@@ -1970,6 +1973,9 @@ enum ThemePick {
     Delete,
 }
 
+/// A clickable theme cell: a preview swatch + the theme name, with an accent
+/// ring when selected and a ✕ to delete imported themes. Drawn at a *fixed*
+/// size so a row of cells is perfectly level (no layout drift between cells).
 fn theme_choice(
     ui: &mut egui::Ui,
     name: &str,
@@ -1979,31 +1985,49 @@ fn theme_choice(
     selected: bool,
     deletable: bool,
 ) -> ThemePick {
-    let resp = egui::Frame::group(ui.style())
-        .inner_margin(egui::Margin::symmetric(10, 7))
-        .corner_radius(egui::CornerRadius::same(10))
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                theme_swatch(ui, bg, accent, glow);
-                ui.add_space(3.0);
-                ui.label(RichText::new(name).strong());
-            });
-        })
-        .response
-        .interact(egui::Sense::click())
-        .on_hover_cursor(egui::CursorIcon::PointingHand);
-    if selected {
-        ui.painter().rect_stroke(
-            resp.rect,
-            egui::CornerRadius::same(10),
-            egui::Stroke::new(2.0, accent),
-            egui::StrokeKind::Inside,
-        );
-    }
-    // A small ✕ in the top-right corner removes an imported theme. It is added
-    // after the cell so it sits on top and captures clicks in its corner.
+    const CELL_H: f32 = 40.0;
+    const SWATCH_W: f32 = 44.0;
+    const SWATCH_H: f32 = 28.0;
+    const PAD: f32 = 10.0;
+    const GAP: f32 = 8.0;
+
+    let text_color = ui.visuals().text_color();
+    let border_color = ui.visuals().widgets.noninteractive.bg_stroke.color;
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    let galley = ui
+        .ctx()
+        .fonts(|f| f.layout_no_wrap(name.to_owned(), font, text_color));
+
+    let cell_w = PAD + SWATCH_W + GAP + galley.size().x + PAD;
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(cell_w, CELL_H), egui::Sense::click());
+    let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+
+    let cr = egui::CornerRadius::same(10);
+    let (border, border_w) = if selected {
+        (accent, 2.0)
+    } else {
+        (border_color, 1.0)
+    };
+    ui.painter().rect_stroke(
+        rect,
+        cr,
+        egui::Stroke::new(border_w, border),
+        egui::StrokeKind::Inside,
+    );
+
+    // Swatch + label, both vertically centered in the fixed-height cell.
+    let sw = egui::Rect::from_min_size(
+        egui::pos2(rect.left() + PAD, rect.center().y - SWATCH_H / 2.0),
+        egui::vec2(SWATCH_W, SWATCH_H),
+    );
+    paint_swatch(ui.painter(), sw, bg, accent, glow);
+    let text_pos = egui::pos2(sw.right() + GAP, rect.center().y - galley.size().y / 2.0);
+    ui.painter().galley(text_pos, galley, text_color);
+
+    // A small ✕ in the top-right corner removes an imported theme.
+    let mut deleted = false;
     if deletable {
-        let center = egui::pos2(resp.rect.right() - 8.0, resp.rect.top() + 8.0);
+        let center = egui::pos2(rect.right() - 9.0, rect.top() + 9.0);
         let hit = egui::Rect::from_center_size(center, egui::vec2(16.0, 16.0));
         let del = ui
             .interact(hit, resp.id.with("del"), egui::Sense::click())
@@ -2032,11 +2056,12 @@ fn theme_choice(
             ],
             stroke,
         );
-        if del.clicked() {
-            return ThemePick::Delete;
-        }
+        deleted = del.clicked();
     }
-    if resp.clicked() {
+
+    if deleted {
+        ThemePick::Delete
+    } else if resp.clicked() {
         ThemePick::Select
     } else {
         ThemePick::None

@@ -16,22 +16,13 @@ pub enum TrayAction {
     Quit,
 }
 
-/// A small 32×32 accent-blue tile with a darker border.
+/// The GameSync brand logo, for the tray / menu-bar icon.
 fn make_icon() -> Option<tray_icon::Icon> {
-    let size = 32u32;
-    let mut rgba = Vec::with_capacity((size * size * 4) as usize);
-    for y in 0..size {
-        for x in 0..size {
-            let border = x < 2 || y < 2 || x >= size - 2 || y >= size - 2;
-            let (r, g, b) = if border {
-                (0x20, 0x40, 0x80)
-            } else {
-                (0x4d, 0x8d, 0xff)
-            };
-            rgba.extend_from_slice(&[r, g, b, 0xff]);
-        }
-    }
-    tray_icon::Icon::from_rgba(rgba, size, size).ok()
+    let img = image::load_from_memory(include_bytes!("../assets/brand.png"))
+        .ok()?
+        .to_rgba8();
+    let (w, h) = (img.width(), img.height());
+    tray_icon::Icon::from_rgba(img.into_raw(), w, h).ok()
 }
 
 /// Build the tray and a receiver of menu actions. Returns `None` if the platform
