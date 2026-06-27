@@ -2043,7 +2043,7 @@ const GLOW_N: usize = 24;
 /// Each ring shrinks and brightens toward the button, so stacking them builds a
 /// soft gradient that's strongest at the edge and fades smoothly outward.
 fn glow_layers() -> [(f32, u8); GLOW_N] {
-    const MAX_GROW: f32 = 13.0;
+    const MAX_GROW: f32 = 8.0;
     let mut out = [(0.0_f32, 0_u8); GLOW_N];
     for (i, layer) in out.iter_mut().enumerate() {
         // t: ~0 at the outermost (largest, faintest) ring → ~1 nearest the button.
@@ -2052,7 +2052,7 @@ fn glow_layers() -> [(f32, u8); GLOW_N] {
         // Quadratic build-up: very faint out wide, ramping gently toward the
         // edge. Low per-ring alpha keeps the stacked halo a soft bloom rather
         // than a blinding glow.
-        let alpha = (0.5 + 2.0 * t * t).round() as u8;
+        let alpha = (0.3 + 1.0 * t * t).round() as u8;
         *layer = (grow, alpha);
     }
     out
