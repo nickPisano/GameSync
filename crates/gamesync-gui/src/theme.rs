@@ -12,6 +12,39 @@ use std::path::Path;
 use eframe::egui::{self, Color32, Visuals};
 use serde::{Deserialize, Serialize};
 
+/// Install the OS UI font as the proportional family so the native app reads
+/// like the v0.2.5 web build, which uses the system font stack
+/// (`-apple-system, "Segoe UI", Roboto, sans-serif`). egui's bundled font is
+/// kept as a fallback (and for emoji); if no system font is found we keep the
+/// default. Call once at startup.
+pub fn apply_fonts(ctx: &egui::Context) {
+    let candidates: &[&str] = &[
+        "/System/Library/Fonts/SFNS.ttf", // macOS — San Francisco
+        "/System/Library/Fonts/SFNSText.ttf",
+        "C:\\Windows\\Fonts\\segoeui.ttf", // Windows — Segoe UI
+        "/usr/share/fonts/truetype/roboto/Roboto-Regular.ttf", // Linux
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ];
+    for path in candidates {
+        let Ok(bytes) = std::fs::read(path) else {
+            continue;
+        };
+        let mut fonts = egui::FontDefinitions::default();
+        fonts.font_data.insert(
+            "system-ui".to_owned(),
+            std::sync::Arc::new(egui::FontData::from_owned(bytes)),
+        );
+        // Primary proportional font; egui's default stays as a fallback.
+        fonts
+            .families
+            .entry(egui::FontFamily::Proportional)
+            .or_default()
+            .insert(0, "system-ui".to_owned());
+        ctx.set_fonts(fonts);
+        return;
+    }
+}
+
 /// Global spacing/padding tweaks (not part of `Visuals`, so they survive theme
 /// switches). Call once at startup.
 pub fn apply_style(ctx: &egui::Context) {
@@ -390,6 +423,8 @@ pub struct Loaded {
     pub theme: Theme,
     pub custom: Option<Custom>,
     pub use_custom: bool,
+    /// Follow the OS light/dark setting. Default for a fresh install.
+    pub use_auto: bool,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -414,19 +449,30 @@ pub fn load(data_dir: &Path) -> Loaded {
                 theme: Theme::from_name(&p.theme),
                 custom: p.custom,
                 use_custom,
+                use_auto: p.theme == "auto",
             }
         }
+        // Fresh install: follow the OS light/dark setting by default.
         None => Loaded {
             theme: Theme::Midnight,
             custom: None,
             use_custom: false,
+            use_auto: true,
         },
     }
 }
 
-pub fn save(data_dir: &Path, theme: Theme, custom: &Option<Custom>, use_custom: bool) {
+pub fn save(
+    data_dir: &Path,
+    theme: Theme,
+    custom: &Option<Custom>,
+    use_custom: bool,
+    use_auto: bool,
+) {
     let prefs = Prefs {
-        theme: if use_custom {
+        theme: if use_auto {
+            "auto".to_string()
+        } else if use_custom {
             "custom".to_string()
         } else {
             theme.name().to_string()

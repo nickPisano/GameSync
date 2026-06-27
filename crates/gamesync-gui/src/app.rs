@@ -131,6 +131,8 @@ pub struct App {
 
     custom_theme: Option<Custom>,
     use_custom: bool,
+    /// Follow the OS light/dark setting (resolves `theme` to Light/Midnight).
+    use_auto: bool,
     /// Whether the "all themes" gallery modal is open.
     show_themes: bool,
     /// Whether the paste-JSON theme importer is showing, and its buffer.
@@ -148,11 +150,18 @@ impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let data_dir = Engine::default_data_dir();
         let loaded = crate::theme::load(&data_dir);
+        // When following the OS, resolve the concrete theme up front.
+        let theme = if loaded.use_auto && !loaded.use_custom {
+            resolve_auto(&cc.egui_ctx)
+        } else {
+            loaded.theme
+        };
         let visuals = match (loaded.use_custom, &loaded.custom) {
             (true, Some(c)) => c.visuals(),
-            _ => loaded.theme.visuals(),
+            _ => theme.visuals(),
         };
         cc.egui_ctx.set_visuals(visuals);
+        crate::theme::apply_fonts(&cc.egui_ctx);
         crate::theme::apply_style(&cc.egui_ctx);
         let handle = worker::spawn(cc.egui_ctx.clone());
         let (tray, tray_rx) = match tray::setup(cc.egui_ctx.clone()) {
@@ -177,7 +186,7 @@ impl App {
             remote: None,
             storage: None,
             conflicts: std::collections::HashMap::new(),
-            theme: loaded.theme,
+            theme,
             theme_dirty: false,
             search: String::new(),
             sort_key: SortKey::Recent,
@@ -215,6 +224,7 @@ impl App {
             update_status: None,
             custom_theme: loaded.custom,
             use_custom: loaded.use_custom,
+            use_auto: loaded.use_auto,
             show_themes: false,
             theme_import_open: false,
             theme_import_text: String::new(),
@@ -632,14 +642,14 @@ impl App {
                                                     // web build's compact card (path/meta
                                                     // lines are 4–5px apart, not egui's 6px).
                                                     ui.spacing_mut().item_spacing.y = 4.0;
-                                                    ui.horizontal(|ui| {
-                                                        ui.label(
-                                                            RichText::new(g.name.as_str())
-                                                                .size(16.0)
-                                                                .strong(),
-                                                        );
-                                                        badge(ui, g.platform.as_str());
-                                                    });
+                                                    title_with_badge(
+                                                        ui,
+                                                        g.name.as_str(),
+                                                        g.platform.as_str(),
+                                                    );
+                                                    // A touch more breathing room
+                                                    // between the title and the path.
+                                                    ui.add_space(2.0);
                                                     ui.label(
                                                         RichText::new(
                                                             g.save_root.display().to_string(),
@@ -811,7 +821,7 @@ impl App {
                                                     {
                                                         let _ = tx.send(Cmd::Backup(g.id.clone()));
                                                     }
-                                                    ui.label(RichText::new("Sync").small().weak());
+                                                    ui.label(RichText::new("Sync").weak());
                                                     let mut sync = g.sync_enabled;
                                                     if toggle_switch(ui, &mut sync, accent)
                                                         .changed()
@@ -948,18 +958,35 @@ impl App {
                         // Top-align so every swatch cell shares one baseline (a
                         // plain/centered row lets them drift down to the left).
                         ui.horizontal_top(|ui| {
+                            // Auto: follow the OS light/dark setting.
+                            let auto_accent = resolve_auto(ui.ctx()).accent();
+                            if let ThemePick::Select = theme_choice(
+                                ui,
+                                "Auto",
+                                None,
+                                auto_accent,
+                                None,
+                                self.use_auto,
+                                false,
+                            ) {
+                                self.use_auto = true;
+                                self.use_custom = false;
+                                self.theme_dirty = true;
+                            }
                             for t in Theme::ALL {
-                                let selected = !self.use_custom && self.theme == t;
+                                let selected =
+                                    !self.use_auto && !self.use_custom && self.theme == t;
                                 if let ThemePick::Select = theme_choice(
                                     ui,
                                     t.name(),
-                                    t.bg(),
+                                    Some(t.bg()),
                                     t.accent(),
                                     None,
                                     selected,
                                     false,
                                 ) {
                                     self.theme = t;
+                                    self.use_auto = false;
                                     self.use_custom = false;
                                     self.theme_dirty = true;
                                 }
@@ -1152,6 +1179,7 @@ impl App {
                 // Lay the themes out a fixed 4 per row (built-ins first, then any
                 // imported theme), rather than packing as many as fit.
                 enum Entry {
+                    Auto,
                     Builtin(Theme),
                     Custom {
                         name: String,
@@ -1160,7 +1188,8 @@ impl App {
                         glow: Option<Color32>,
                     },
                 }
-                let mut entries: Vec<Entry> = Theme::ALL.into_iter().map(Entry::Builtin).collect();
+                let mut entries: Vec<Entry> = vec![Entry::Auto];
+                entries.extend(Theme::ALL.into_iter().map(Entry::Builtin));
                 if let Some((name, bg, accent_c, g)) = custom_info {
                     entries.push(Entry::Custom {
                         name,
@@ -1173,18 +1202,36 @@ impl App {
                     ui.horizontal_top(|ui| {
                         for entry in row {
                             match entry {
+                                Entry::Auto => {
+                                    let auto_accent = resolve_auto(ui.ctx()).accent();
+                                    if let ThemePick::Select = theme_choice(
+                                        ui,
+                                        "Auto",
+                                        None,
+                                        auto_accent,
+                                        None,
+                                        self.use_auto,
+                                        false,
+                                    ) {
+                                        self.use_auto = true;
+                                        self.use_custom = false;
+                                        self.theme_dirty = true;
+                                    }
+                                }
                                 Entry::Builtin(t) => {
-                                    let selected = !self.use_custom && self.theme == *t;
+                                    let selected =
+                                        !self.use_auto && !self.use_custom && self.theme == *t;
                                     if let ThemePick::Select = theme_choice(
                                         ui,
                                         t.name(),
-                                        t.bg(),
+                                        Some(t.bg()),
                                         t.accent(),
                                         None,
                                         selected,
                                         false,
                                     ) {
                                         self.theme = *t;
+                                        self.use_auto = false;
                                         self.use_custom = false;
                                         self.theme_dirty = true;
                                     }
@@ -1198,7 +1245,7 @@ impl App {
                                     match theme_choice(
                                         ui,
                                         name,
-                                        *bg,
+                                        Some(*bg),
                                         *accent,
                                         *glow,
                                         self.use_custom,
@@ -1206,6 +1253,7 @@ impl App {
                                     ) {
                                         ThemePick::Select => {
                                             self.use_custom = true;
+                                            self.use_auto = false;
                                             self.theme_dirty = true;
                                         }
                                         ThemePick::Delete => {
@@ -1247,6 +1295,7 @@ impl App {
                                 Some(c) => {
                                     self.custom_theme = Some(c);
                                     self.use_custom = true;
+                                    self.use_auto = false;
                                     self.theme_dirty = true;
                                 }
                                 None => self.toasts.push(Toast {
@@ -1279,6 +1328,7 @@ impl App {
                                     let name = c.name.clone();
                                     self.custom_theme = Some(c);
                                     self.use_custom = true;
+                                    self.use_auto = false;
                                     self.theme_dirty = true;
                                     self.theme_import_open = false;
                                     self.theme_import_text.clear();
@@ -1948,20 +1998,40 @@ fn primary_button(
 const GLOW_LAYERS: [(f32, u8); 4] = [(10.0, 16), (7.0, 26), (4.0, 40), (2.0, 60)];
 
 /// Draw a theme preview swatch — the bg color with a small accent dot, plus an
-/// optional glow halo (the "has effects" cue), mirroring the web build.
 /// Paint a theme preview swatch (bg + accent dot, optional glow) into `rect`.
+/// `auto` draws a split dark/light swatch to signal the "follow OS" theme.
 fn paint_swatch(
     painter: &egui::Painter,
     rect: egui::Rect,
     bg: Color32,
     accent: Color32,
     glow: Option<Color32>,
+    auto: bool,
 ) {
     if let Some(g) = glow {
         paint_glow(painter, rect, g);
     }
     let cr = egui::CornerRadius::same(7);
-    painter.rect_filled(rect, cr, bg);
+    if auto {
+        // Left half dark (Midnight), right half light — "follows the system".
+        painter.rect_filled(rect, cr, Theme::Midnight.bg());
+        let right = egui::Rect::from_min_max(
+            egui::pos2(rect.center().x, rect.top() + 1.0),
+            egui::pos2(rect.right() - 1.0, rect.bottom() - 1.0),
+        );
+        painter.rect_filled(
+            right,
+            egui::CornerRadius {
+                nw: 0,
+                ne: 6,
+                sw: 0,
+                se: 6,
+            },
+            Theme::Light.bg(),
+        );
+    } else {
+        painter.rect_filled(rect, cr, bg);
+    }
     painter.rect_stroke(
         rect,
         cr,
@@ -1988,12 +2058,15 @@ enum ThemePick {
 fn theme_choice(
     ui: &mut egui::Ui,
     name: &str,
-    bg: Color32,
+    // `None` = the "Auto" cell (a split dark/light swatch).
+    bg: Option<Color32>,
     accent: Color32,
     glow: Option<Color32>,
     selected: bool,
     deletable: bool,
 ) -> ThemePick {
+    let auto = bg.is_none();
+    let bg = bg.unwrap_or(Color32::TRANSPARENT);
     const CELL_H: f32 = 40.0;
     const SWATCH_W: f32 = 44.0;
     const SWATCH_H: f32 = 28.0;
@@ -2029,7 +2102,7 @@ fn theme_choice(
         egui::pos2(rect.left() + PAD, rect.center().y - SWATCH_H / 2.0),
         egui::vec2(SWATCH_W, SWATCH_H),
     );
-    paint_swatch(ui.painter(), sw, bg, accent, glow);
+    paint_swatch(ui.painter(), sw, bg, accent, glow, auto);
     let text_pos = egui::pos2(sw.right() + GAP, rect.center().y - galley.size().y / 2.0);
     ui.painter().galley(text_pos, galley, text_color);
 
@@ -2143,7 +2216,15 @@ fn tonal_button(ui: &mut egui::Ui, text: &str, accent: Color32, enabled: bool) -
     ui.add_enabled(enabled, btn)
 }
 
-/// A small readable pill badge with the first letter capitalized.
+/// Resolve the "Auto" theme to a concrete built-in from the OS light/dark
+/// setting (dark or unknown → Midnight, light → Light).
+fn resolve_auto(ctx: &egui::Context) -> Theme {
+    match ctx.system_theme() {
+        Some(egui::Theme::Light) => Theme::Light,
+        _ => Theme::Midnight,
+    }
+}
+
 /// Per-platform badge accent, matching the web build's `.badge-*` colors.
 fn platform_color(platform: &str) -> Color32 {
     match platform.to_lowercase().as_str() {
@@ -2155,39 +2236,61 @@ fn platform_color(platform: &str) -> Color32 {
     }
 }
 
-/// A rounded pill badge for a game's platform (Steam, Standalone, GOG, …),
-/// matching the web build: capitalized label, platform-colored text on a faint
-/// tint of the same color, with a full-pill radius.
-fn badge(ui: &mut egui::Ui, text: &str) {
+/// Render the game title and its platform badge on one row, both centered on a
+/// single vertical line so they read as vertically aligned (egui's default
+/// per-widget centering drifts when the title and the taller badge differ in
+/// height). The badge is a rounded pill tinted with the platform color.
+fn title_with_badge(ui: &mut egui::Ui, name: &str, platform: &str) {
+    let strong = ui.visuals().strong_text_color();
+    let title = ui.ctx().fonts(|f| {
+        f.layout_no_wrap(name.to_owned(), egui::FontId::proportional(16.0), strong)
+    });
+    let (title_w, title_h) = (title.size().x, title.size().y);
+
+    // Capitalize the platform name for the badge label.
     let mut label = String::new();
-    let mut chars = text.chars();
+    let mut chars = platform.chars();
     if let Some(first) = chars.next() {
         label.extend(first.to_uppercase());
         label.push_str(chars.as_str());
     }
-    let color = platform_color(text);
-    let font = egui::FontId::new(11.0, egui::FontFamily::Proportional);
-    let galley = ui.fonts(|f| f.layout_no_wrap(label, font, color));
-    let (pad_x, pad_y) = (9.0, 3.0);
-    let size = egui::vec2(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0);
-    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
-    let radius = egui::CornerRadius::same((rect.height() * 0.5) as u8);
-    // 15% fill / 28% border tints of the platform color (over the card).
+    let color = platform_color(platform);
+    let bg = ui
+        .ctx()
+        .fonts(|f| f.layout_no_wrap(label, egui::FontId::proportional(12.0), color));
+    let bg_h = bg.size().y;
+    let (pad_x, pad_y) = (10.0, 4.0);
+    let badge_w = bg.size().x + pad_x * 2.0;
+    let badge_h = bg_h + pad_y * 2.0;
+
+    let gap = 8.0;
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(title_w + gap + badge_w, title_h.max(badge_h)),
+        egui::Sense::hover(),
+    );
+    let cy = rect.center().y;
+
+    // Title, centered on cy.
+    ui.painter()
+        .galley(egui::pos2(rect.left(), cy - title_h / 2.0), title, strong);
+
+    // Badge pill + label, centered on the same cy.
+    let brect = egui::Rect::from_min_size(
+        egui::pos2(rect.left() + title_w + gap, cy - badge_h / 2.0),
+        egui::vec2(badge_w, badge_h),
+    );
+    let radius = egui::CornerRadius::same((badge_h * 0.5) as u8);
     let fill = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 38);
     let border = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 72);
-    let painter = ui.painter();
-    painter.rect_filled(rect, radius, fill);
-    painter.rect_stroke(
-        rect,
+    ui.painter().rect_filled(brect, radius, fill);
+    ui.painter().rect_stroke(
+        brect,
         radius,
         egui::Stroke::new(1.0, border),
         egui::StrokeKind::Inside,
     );
-    painter.galley(
-        egui::pos2(rect.left() + pad_x, rect.center().y - galley.size().y * 0.5),
-        galley,
-        color,
-    );
+    ui.painter()
+        .galley(egui::pos2(brect.left() + pad_x, cy - bg_h / 2.0), bg, color);
 }
 
 /// A sliding on/off switch. Returns a response whose `.changed()` reflects toggles.
@@ -2200,12 +2303,14 @@ fn toggle_switch(ui: &mut egui::Ui, on: &mut bool, accent: Color32) -> egui::Res
     }
     let t = ui.ctx().animate_bool(resp.id, *on);
     let r = rect.height() * 0.5;
-    let track = if *on { accent } else { Color32::from_gray(90) };
+    let cr = egui::CornerRadius::same(r as u8);
+    let col = if *on { accent } else { Color32::from_gray(120) };
+    // Transparent (outline) track: just a colored border + knob, no solid fill.
     ui.painter()
-        .rect_filled(rect, egui::CornerRadius::same(r as u8), track);
+        .rect_stroke(rect, cr, egui::Stroke::new(1.5, col), egui::StrokeKind::Inside);
     let cx = egui::lerp((rect.left() + r)..=(rect.right() - r), t);
     ui.painter()
-        .circle_filled(egui::pos2(cx, rect.center().y), r * 0.72, Color32::WHITE);
+        .circle_filled(egui::pos2(cx, rect.center().y), r * 0.62, col);
     resp
 }
 
@@ -2214,6 +2319,15 @@ impl eframe::App for App {
         self.drain_events();
         self.toasts
             .retain(|t| t.at.elapsed() < Duration::from_secs(6));
+
+        // Auto theme: track the OS light/dark setting and re-theme when it flips.
+        if self.use_auto && !self.use_custom {
+            let resolved = resolve_auto(ctx);
+            if resolved != self.theme {
+                self.theme = resolved;
+                self.theme_dirty = true;
+            }
+        }
 
         // Custom-theme background effects: gradient + animated bubbles, painted
         // behind the (transparent) panels.
@@ -2304,6 +2418,7 @@ impl eframe::App for App {
                 self.theme,
                 &self.custom_theme,
                 self.use_custom,
+                self.use_auto,
             );
             self.theme_dirty = false;
         }
