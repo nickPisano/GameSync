@@ -378,6 +378,8 @@ impl App {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.button("Settings").clicked() {
                             self.show_settings = true;
+                            // Refresh storage usage so it's shown without a click.
+                            let _ = tx.send(Cmd::FetchStorage);
                         }
                         if ui.button("Plugins").clicked() {
                             self.show_plugins = true;
@@ -999,21 +1001,21 @@ impl App {
                     {
                         let _ = tx.send(Cmd::SetCompression(comp));
                     }
-                    ui.horizontal(|ui| {
-                        if ui.button("Calculate usage").clicked() {
-                            let _ = tx.send(Cmd::FetchStorage);
+                    match &self.storage {
+                        Some(st) => {
+                            ui.label(format!(
+                                "{} objects · {} on disk{}",
+                                st.total_objects,
+                                human_size(st.total_bytes),
+                                if st.compressed { " (compressed)" } else { "" }
+                            ));
                         }
-                        if ui.button("Verify integrity").clicked() {
-                            let _ = tx.send(Cmd::Verify);
+                        None => {
+                            ui.label(RichText::new("Calculating usage…").weak());
                         }
-                    });
-                    if let Some(st) = &self.storage {
-                        ui.label(format!(
-                            "{} objects · {} on disk{}",
-                            st.total_objects,
-                            human_size(st.total_bytes),
-                            if st.compressed { " (compressed)" } else { "" }
-                        ));
+                    }
+                    if ui.button("Verify integrity").clicked() {
+                        let _ = tx.send(Cmd::Verify);
                     }
 
                     ui.separator();
