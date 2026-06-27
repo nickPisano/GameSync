@@ -2405,12 +2405,11 @@ fn title_with_badge(ui: &mut egui::Ui, name: &str, platform: &str) {
         egui::pos2(rect.left() + title_w + gap, cy - badge_h / 2.0),
         egui::vec2(badge_w, badge_h),
     );
-    // A visibly translucent colored pill (like the web build's `.badge-*`): a
-    // glassy fill that lets the card show through, a slightly stronger tinted
-    // border, and a gently rounded-rect shape.
-    let radius = egui::CornerRadius::same(7);
+    // A glassy translucent colored pill: a very light fill that lets the card
+    // show through, a soft tinted border, and a fully-rounded capsule shape.
+    let radius = egui::CornerRadius::same((badge_h * 0.5) as u8);
     let fill = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 10);
-    let border = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 110);
+    let border = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 72);
     ui.painter().rect_filled(brect, radius, fill);
     ui.painter().rect_stroke(
         brect,
