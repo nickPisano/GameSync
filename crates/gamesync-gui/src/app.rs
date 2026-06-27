@@ -563,9 +563,7 @@ impl App {
                 // toggle, so the library view is uncluttered by default.
                 if self.show_filters {
                     ui.horizontal(|ui| {
-                        ui.label(
-                            RichText::new(format!("Games ({})", self.games.len())).strong(),
-                        );
+                        ui.label(RichText::new(format!("Games ({})", self.games.len())).strong());
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             // Force the dropdown + filter to the same height. The
                             // combo button height is driven by button_padding, so
@@ -596,7 +594,16 @@ impl App {
                     ui.add_space(4.0);
                 }
                 let q = self.search.trim().to_lowercase();
-                let card_fill = ui.visuals().faint_bg_color;
+                // Under a "fancy" theme (gradient/bubbles painted on the
+                // background), make the cards translucent so the effect shows
+                // through them instead of being hidden by an opaque fill.
+                let fancy =
+                    self.use_custom && self.custom_theme.as_ref().is_some_and(|c| c.is_fancy());
+                let card_fill = {
+                    let c = ui.visuals().faint_bg_color;
+                    let a = if fancy { 140 } else { c.a() };
+                    Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), a)
+                };
                 egui::ScrollArea::vertical()
                     .auto_shrink(false)
                     .show(ui, |ui| {
@@ -2254,7 +2261,10 @@ fn pill_badge(ui: &mut egui::Ui, text: &str, color: Color32) {
         egui::StrokeKind::Inside,
     );
     painter.galley(
-        egui::pos2(brect.left() + pad_x, brect.center().y - galley.size().y * 0.5),
+        egui::pos2(
+            brect.left() + pad_x,
+            brect.center().y - galley.size().y * 0.5,
+        ),
         galley,
         color,
     );
@@ -2295,9 +2305,9 @@ fn platform_color(platform: &str) -> Color32 {
 /// height). The badge is a rounded pill tinted with the platform color.
 fn title_with_badge(ui: &mut egui::Ui, name: &str, platform: &str) {
     let strong = ui.visuals().strong_text_color();
-    let title = ui.ctx().fonts(|f| {
-        f.layout_no_wrap(name.to_owned(), egui::FontId::proportional(16.0), strong)
-    });
+    let title = ui
+        .ctx()
+        .fonts(|f| f.layout_no_wrap(name.to_owned(), egui::FontId::proportional(16.0), strong));
     let (title_w, title_h) = (title.size().x, title.size().y);
 
     // Capitalize the platform name for the badge label.
@@ -2359,8 +2369,12 @@ fn toggle_switch(ui: &mut egui::Ui, on: &mut bool, accent: Color32) -> egui::Res
     let cr = egui::CornerRadius::same(r as u8);
     let col = if *on { accent } else { Color32::from_gray(120) };
     // Transparent (outline) track: just a colored border + knob, no solid fill.
-    ui.painter()
-        .rect_stroke(rect, cr, egui::Stroke::new(1.5, col), egui::StrokeKind::Inside);
+    ui.painter().rect_stroke(
+        rect,
+        cr,
+        egui::Stroke::new(1.5, col),
+        egui::StrokeKind::Inside,
+    );
     let cx = egui::lerp((rect.left() + r)..=(rect.right() - r), t);
     ui.painter()
         .circle_filled(egui::pos2(cx, rect.center().y), r * 0.62, col);
