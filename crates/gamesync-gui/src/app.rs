@@ -470,7 +470,11 @@ impl App {
                 // placed before the taller buttons and get pinned to the top
                 // instead of vertically centering.
                 ui.spacing_mut().interact_size.y = 32.0;
-                ui.spacing_mut().button_padding.y = 7.0;
+                // Roomier buttons (Browse/Save) with a bit more breathing room
+                // between them; the text field is INFINITY-width so it gives up
+                // the extra space rather than the bar growing.
+                ui.spacing_mut().button_padding = egui::vec2(20.0, 7.0);
+                ui.spacing_mut().item_spacing.x = 10.0;
                 translucent_button_fills(ui);
                 ui.horizontal(|ui| {
                     ui.set_min_height(32.0);
