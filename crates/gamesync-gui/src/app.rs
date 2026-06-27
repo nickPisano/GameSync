@@ -489,7 +489,7 @@ impl App {
                             } else {
                                 Color32::from_rgb(0x1a, 0x7f, 0x37)
                             };
-                            pill_badge(ui, "set", ok);
+                            pill_badge(ui, "configured", ok);
                         } else {
                             pill_badge(ui, "not set", Color32::from_rgb(0x9a, 0xa6, 0xb2));
                         }
