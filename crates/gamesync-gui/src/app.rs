@@ -2306,7 +2306,7 @@ fn translucent_button_fills(ui: &mut egui::Ui) {
     let w = &mut ui.visuals_mut().widgets;
     for st in [&mut w.inactive, &mut w.hovered, &mut w.active] {
         let c = st.weak_bg_fill;
-        st.weak_bg_fill = Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), 150);
+        st.weak_bg_fill = Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), 80);
     }
 }
 
