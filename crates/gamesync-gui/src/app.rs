@@ -2292,11 +2292,11 @@ fn fill_glow(
 /// A small rounded pill badge: `text` in `color` on a faint tint of it (the
 /// same style as the platform badges). Vertically centered in a 32px row.
 fn pill_badge(ui: &mut egui::Ui, text: &str, color: Color32) {
-    let font = egui::FontId::new(12.0, egui::FontFamily::Proportional);
+    let font = egui::FontId::new(14.0, egui::FontFamily::Proportional);
     let galley = ui
         .ctx()
         .fonts(|f| f.layout_no_wrap(text.to_owned(), font, color));
-    let (pad_x, pad_y) = (9.0, 3.0);
+    let (pad_x, pad_y) = (12.0, 5.0);
     let pill = egui::vec2(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0);
     // Reserve the row height so the pill centers with the buttons beside it.
     let (rect, _) = ui.allocate_exact_size(egui::vec2(pill.x, 32.0), egui::Sense::hover());
