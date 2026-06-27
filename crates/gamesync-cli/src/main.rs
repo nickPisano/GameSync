@@ -1,7 +1,7 @@
 //! `gamesync` — a thin command-line driver over `gamesync-core`.
 //!
-//! This exists to exercise and demonstrate the engine end-to-end before the
-//! Tauri UI is built. Every command maps directly to an `Engine` method.
+//! It exercises and demonstrates the engine end-to-end alongside the native
+//! egui GUI. Every command maps directly to an `Engine` method.
 
 use std::path::PathBuf;
 use std::process::exit;

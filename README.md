@@ -5,7 +5,7 @@ titles that lack reliable Steam Cloud (Dark Souls 2/3, older PC games,
 emulators, modded/indie games). Think "Syncthing, but scoped to save folders and
 built to never corrupt or lose a save."
 
-GameSync is a **desktop app** (a native window powered by Rust + a web UI). It
+GameSync is a **desktop app** (a native Rust window — egui, no web stack). It
 runs locally and touches your real save folders and game processes, so it isn't
 a website — it has to run on your machine.
 
@@ -37,36 +37,34 @@ compile it yourself? See [Build from source](#build-from-source) below.
 ### Download a prebuilt build (recommended)
 
 **1. Get the file for your OS.** Open the [**Releases**](https://github.com/nickPisano/GameSync/releases)
-page, expand the latest version's **Assets**, and download either an
-**installer** or a **portable** build (`<ver>` is the version number in the
-filename, e.g. `0.1.0`):
+page, expand the latest version's **Assets**, and download the **portable**
+build for your system (`<ver>` is the version number in the filename, e.g.
+`0.3.0`). Each is a single, self-contained executable — no installer, and no
+WebView runtime:
 
-| Your system | Installer | Portable (no install — just run) |
-| --- | --- | --- |
-| **macOS** (Intel *or* Apple Silicon) | `GameSync_<ver>_universal.dmg` | the **GameSync.app** inside that `.dmg` |
-| **Windows x64** | `GameSync_<ver>_x64-setup.exe` *or* `…_x64_en-US.msi` | `GameSync_<ver>_x64-portable.exe` |
-| **Windows arm64** | `GameSync_<ver>_arm64-setup.exe` *or* `…_arm64_en-US.msi` | `GameSync_<ver>_arm64-portable.exe` |
-| **Linux x64** | `GameSync_<ver>_amd64.deb` *or* `GameSync-<ver>-1.x86_64.rpm` | `GameSync_<ver>_amd64.AppImage` |
-| **Linux arm64** | `GameSync_<ver>_arm64.deb` *or* `GameSync-<ver>-1.aarch64.rpm` | `GameSync_<ver>_aarch64.AppImage` |
+| Your system | Download |
+| --- | --- |
+| **macOS** (Intel *or* Apple Silicon) | `GameSync_<ver>_macos-universal` |
+| **Windows x64** | `GameSync_<ver>_windows-x64-portable.exe` |
+| **Windows arm64** | `GameSync_<ver>_windows-arm64-portable.exe` |
+| **Linux x64** | `GameSync_<ver>_linux-x64` |
+| **Linux arm64** | `GameSync_<ver>_linux-arm64` |
 
-> **Which architecture?** The macOS build is *universal* (runs on both), so just
-> take the `.dmg`. On **Windows**: Settings → System → About → *System type*. On
-> **Linux**: run `uname -m` (`x86_64` → x64, `aarch64` → arm64).
+> **Which architecture?** The macOS build is *universal* (runs on both). On
+> **Windows**: Settings → System → About → *System type*. On **Linux**: run
+> `uname -m` (`x86_64` → x64, `aarch64` → arm64).
 
-**2. Install or run it:**
+**2. Run it:**
 
-- **macOS** — open the `.dmg`, drag **GameSync** into **Applications**, launch it.
-- **Windows** — run the `-setup.exe` (or `.msi`) to install, **or** just
-  double-click the `-portable.exe` to run with no install. Needs the **WebView2
-  Runtime** (preinstalled on Windows 10/11).
-- **Linux** — installer: `sudo apt install ./GameSync_<ver>_amd64.deb` (or
-  `sudo dnf install ./GameSync-<ver>-1.x86_64.rpm`). Portable:
-  `chmod +x GameSync_<ver>_amd64.AppImage && ./GameSync_<ver>_amd64.AppImage`.
+- **macOS / Linux** — make it executable, then launch:
+  `chmod +x GameSync_<ver>_* && ./GameSync_<ver>_*`.
+- **Windows** — just double-click the `.exe`. No install, and no WebView2
+  Runtime needed.
 
 > **First run shows an "unidentified developer" warning.** The builds aren't
 > code-signed yet, so the OS blocks them by default. It's safe to allow:
-> - **macOS:** right-click **GameSync** → **Open** → **Open** (just the first
->   time), or run `xattr -dr com.apple.quarantine /Applications/GameSync.app`.
+> - **macOS:** right-click the app → **Open** → **Open** (just the first time),
+>   or run `xattr -dr com.apple.quarantine ./GameSync_<ver>_macos-universal`.
 > - **Windows:** on the SmartScreen dialog, click **More info → Run anyway**.
 
 **3.** The app opens — continue to [First-time setup](#tutorial-first-time-setup).
@@ -75,15 +73,15 @@ filename, e.g. `0.1.0`):
 
 For development, or a platform/arch without a prebuilt binary.
 
-**1. Install the prerequisites** — **Rust**, **Node.js 18+**, and your OS's C
-toolchain + system webview:
+**1. Install the prerequisites** — **Rust** and your OS's C toolchain. The UI is
+a native [egui](https://github.com/emilk/egui) app, so there's **no Node.js, no
+WebView, and no system browser** to install:
 
 - **Rust** — from <https://rustup.rs> (or `brew install rust`); check `cargo --version`.
-- **Node.js 18+** — from <https://nodejs.org> (or `brew install node`); check `node --version`.
-- **C toolchain + webview:**
-  - **macOS:** `xcode-select --install` (WebKit ships with macOS).
-  - **Windows:** *Microsoft Visual C++ Build Tools* + the *WebView2 Runtime* (preinstalled on Win11).
-  - **Linux (Debian/Ubuntu):** `sudo apt install libwebkit2gtk-4.1-dev build-essential libssl-dev libayatana-appindicator3-dev librsvg2-dev`
+- **C toolchain + native GUI libs:**
+  - **macOS:** `xcode-select --install`.
+  - **Windows:** *Microsoft Visual C++ Build Tools*.
+  - **Linux (Debian/Ubuntu):** `sudo apt install build-essential libssl-dev libgtk-3-dev libxkbcommon-dev libayatana-appindicator3-dev`
 
   (No database to install — SQLite is bundled.)
 
@@ -92,21 +90,19 @@ toolchain + system webview:
 ```sh
 git clone https://github.com/nickPisano/GameSync.git
 cd GameSync
-npm install            # one time: install frontend dependencies
-npm run tauri dev      # builds + launches the app window
+cargo run -p gamesync-gui      # builds + launches the app window
 ```
 
-The first compile builds the whole webview stack (a few minutes); later launches
-are fast.
+The first compile takes a few minutes; later launches are fast.
 
-**3. (Optional) Build your own installers/portables:**
+**3. (Optional) Build your own portable binary:**
 
 ```sh
-npm run tauri build    # bundles for the current OS in target/release/bundle/
+cargo build --release -p gamesync-gui   # binary in target/release/gamesync-gui
 ```
 
 See [`docs/BUILDING.md`](docs/BUILDING.md) for multi-arch builds, the automated
-release workflow, and **code signing & notarization** (needs your own certs).
+release workflow, and **code signing** (needs your own certs).
 
 ---
 
@@ -476,7 +472,7 @@ safety snapshot).
 ```sh
 cargo test --workspace      # run the engine test suite
 cargo build -p gamesync-cli # build the CLI
-npm run build               # type-check + bundle the frontend
+cargo run -p gamesync-gui   # build + launch the native GUI
 ```
 
 Layout:
@@ -484,8 +480,7 @@ Layout:
 ```
 crates/gamesync-core/   # the engine (library): detection, snapshots, sync, crypto
 crates/gamesync-cli/    # CLI driver
-src/                    # React + TypeScript frontend
-src-tauri/              # Tauri desktop shell + command layer
+crates/gamesync-gui/    # native egui/eframe desktop app (no webview)
 docs/ARCHITECTURE.md    # design, safety model, sync protocol, roadmap
 ```
 

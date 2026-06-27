@@ -5,9 +5,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
-# A native, webview-free desktop UI for GameSync, built on egui/eframe.
-# Experiment (branch `experiment/native-gui`) to replace the Tauri/WebView2
-# shell so the shipped binary embeds no browser engine at all.
+# GameSync's desktop UI: a native, webview-free app built on egui/eframe. It
+# replaced the original Tauri/WebView2 shell so the shipped binary embeds no
+# browser engine at all.
 
 [dependencies]
 gamesync-core = { path = "../gamesync-core" }

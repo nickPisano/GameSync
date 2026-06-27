@@ -1,5 +1,5 @@
-//! Domain types. These are the shapes that cross the engine boundary and will
-//! also be the IPC surface for the Tauri UI (serializable via serde).
+//! Domain types. These are the shapes that cross the engine boundary into the
+//! egui GUI and the CLI (serializable via serde).
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

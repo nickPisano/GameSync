@@ -296,7 +296,10 @@ impl Cas {
                 continue; // already plaintext (e.g. resuming an interrupted run)
             }
             let inner = decrypt_blob(cipher, &blob)?;
-            let tmp = self.root.join(".incoming").join(format!("dec-{}", new_id()));
+            let tmp = self
+                .root
+                .join(".incoming")
+                .join(format!("dec-{}", new_id()));
             {
                 let mut f = fs::File::create(&tmp)?;
                 f.write_all(&inner)?;
