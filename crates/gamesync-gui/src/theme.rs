@@ -18,31 +18,71 @@ use serde::{Deserialize, Serialize};
 /// kept as a fallback (and for emoji); if no system font is found we keep the
 /// default. Call once at startup.
 pub fn apply_fonts(ctx: &egui::Context) {
-    let candidates: &[&str] = &[
-        "/System/Library/Fonts/SFNS.ttf", // macOS — San Francisco
-        "/System/Library/Fonts/SFNSText.ttf",
-        "C:\\Windows\\Fonts\\segoeui.ttf", // Windows — Segoe UI
-        "/usr/share/fonts/truetype/roboto/Roboto-Regular.ttf", // Linux
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    // Regular system UI font (matches v0.2.5's `-apple-system` look).
+    let regular: &[(&str, u32)] = &[
+        ("/System/Library/Fonts/SFNS.ttf", 0), // macOS — San Francisco
+        ("/System/Library/Fonts/SFNSText.ttf", 0),
+        ("C:\\Windows\\Fonts\\segoeui.ttf", 0), // Windows — Segoe UI
+        ("/usr/share/fonts/truetype/roboto/Roboto-Regular.ttf", 0), // Linux
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 0),
     ];
-    for path in candidates {
-        let Ok(bytes) = std::fs::read(path) else {
-            continue;
-        };
-        let mut fonts = egui::FontDefinitions::default();
-        fonts.font_data.insert(
-            "system-ui".to_owned(),
-            std::sync::Arc::new(egui::FontData::from_owned(bytes)),
-        );
-        // Primary proportional font; egui's default stays as a fallback.
+    // A true bold face, registered as its own family so button labels can be
+    // genuinely bold (egui can't synthesize weight — `.strong()` only recolors).
+    // Helvetica Neue Bold (face #1 of the .ttc) pairs cleanly with SF; the
+    // standalone bolds are guaranteed fallbacks if the collection isn't present.
+    let bold: &[(&str, u32)] = &[
+        ("/System/Library/Fonts/HelveticaNeue.ttc", 1), // macOS — Helvetica Neue Bold
+        ("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 0),
+        ("/System/Library/Fonts/Supplemental/Verdana Bold.ttf", 0),
+        ("C:\\Windows\\Fonts\\segoeuib.ttf", 0), // Windows — Segoe UI Bold
+        ("C:\\Windows\\Fonts\\arialbd.ttf", 0),
+        ("/usr/share/fonts/truetype/roboto/Roboto-Bold.ttf", 0), // Linux
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0),
+    ];
+
+    let load = |path: &str, index: u32| -> Option<egui::FontData> {
+        let bytes = std::fs::read(path).ok()?;
+        let mut fd = egui::FontData::from_owned(bytes);
+        fd.index = index;
+        Some(fd)
+    };
+
+    let mut fonts = egui::FontDefinitions::default();
+
+    // Primary proportional font; egui's default stays as a fallback.
+    if let Some(fd) = regular.iter().find_map(|&(p, i)| load(p, i)) {
+        fonts
+            .font_data
+            .insert("system-ui".to_owned(), std::sync::Arc::new(fd));
         fonts
             .families
             .entry(egui::FontFamily::Proportional)
             .or_default()
             .insert(0, "system-ui".to_owned());
-        ctx.set_fonts(fonts);
-        return;
     }
+
+    // Always define a "bold" family so referencing it can never panic; if a real
+    // bold face loads it goes first, otherwise the family falls back to the
+    // regular proportional stack (button text simply renders unbolded).
+    let mut bold_stack = Vec::new();
+    if let Some(fd) = bold.iter().find_map(|&(p, i)| load(p, i)) {
+        fonts
+            .font_data
+            .insert("system-bold".to_owned(), std::sync::Arc::new(fd));
+        bold_stack.push("system-bold".to_owned());
+    }
+    bold_stack.extend(
+        fonts
+            .families
+            .get(&egui::FontFamily::Proportional)
+            .cloned()
+            .unwrap_or_default(),
+    );
+    fonts
+        .families
+        .insert(egui::FontFamily::Name("bold".into()), bold_stack);
+
+    ctx.set_fonts(fonts);
 }
 
 /// Global spacing/padding tweaks (not part of `Visuals`, so they survive theme
@@ -53,25 +93,27 @@ pub fn apply_style(ctx: &egui::Context) {
     style.text_styles = [
         (
             TextStyle::Heading,
-            FontId::new(18.0, FontFamily::Proportional),
+            FontId::new(19.0, FontFamily::Proportional),
         ),
-        (TextStyle::Body, FontId::new(14.0, FontFamily::Proportional)),
+        (TextStyle::Body, FontId::new(15.0, FontFamily::Proportional)),
+        // Buttons use a dedicated bold family (registered in `apply_fonts`) so
+        // every button label is genuinely bold.
         (
             TextStyle::Button,
-            FontId::new(13.0, FontFamily::Proportional),
+            FontId::new(14.0, FontFamily::Name("bold".into())),
         ),
         (
             TextStyle::Small,
-            FontId::new(12.0, FontFamily::Proportional),
+            FontId::new(13.0, FontFamily::Proportional),
         ),
         (
             TextStyle::Monospace,
-            FontId::new(13.0, FontFamily::Monospace),
+            FontId::new(14.0, FontFamily::Monospace),
         ),
     ]
     .into();
     style.spacing.item_spacing = egui::vec2(8.0, 6.0);
-    style.spacing.button_padding = egui::vec2(15.0, 8.0);
+    style.spacing.button_padding = egui::vec2(17.0, 9.0);
     ctx.set_style(style);
 }
 

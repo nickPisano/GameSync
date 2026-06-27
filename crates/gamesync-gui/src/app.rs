@@ -257,12 +257,14 @@ impl App {
         } else {
             ctx.style().visuals.panel_fill
         };
-        egui::Frame::default().fill(fill).inner_margin(egui::Margin {
-            left: 22,
-            right: 22,
-            top: v,
-            bottom: v,
-        })
+        egui::Frame::default()
+            .fill(fill)
+            .inner_margin(egui::Margin {
+                left: 22,
+                right: 22,
+                top: v,
+                bottom: v,
+            })
     }
 
     /// The active theme's primary-button glow color, if it enables `effects.glow`.
@@ -393,6 +395,7 @@ impl App {
         egui::TopBottomPanel::top("top")
             .frame(self.bar_frame(ctx, 13))
             .show(ctx, |ui| {
+                translucent_button_fills(ui);
                 ui.horizontal(|ui| {
                     if let Some(tex) = &self.brand {
                         ui.image(egui::load::SizedTexture::new(
@@ -466,13 +469,14 @@ impl App {
                 // height; otherwise the short "REMOTE"/"not set" labels are
                 // placed before the taller buttons and get pinned to the top
                 // instead of vertically centering.
-                ui.spacing_mut().interact_size.y = 30.0;
-                ui.spacing_mut().button_padding.y = 6.0;
+                ui.spacing_mut().interact_size.y = 32.0;
+                ui.spacing_mut().button_padding.y = 7.0;
+                translucent_button_fills(ui);
                 ui.horizontal(|ui| {
-                    ui.set_min_height(30.0);
+                    ui.set_min_height(32.0);
                     ui.label(RichText::new("REMOTE").small().weak());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.set_min_height(30.0);
+                        ui.set_min_height(32.0);
                         if self.remote.is_some() {
                             // Green "set" pill, matching the web build's --ok
                             // (#3fb950 on dark themes, #1a7f37 on light).
@@ -591,10 +595,10 @@ impl App {
                             // Force the dropdown + filter to the same height. The
                             // combo button height is driven by button_padding, so
                             // cap that here and size the text field to match.
-                            ui.spacing_mut().interact_size.y = 30.0;
-                            ui.spacing_mut().button_padding.y = 6.0;
+                            ui.spacing_mut().interact_size.y = 32.0;
+                            ui.spacing_mut().button_padding.y = 7.0;
                             ui.add_sized(
-                                egui::vec2(176.0, 30.0),
+                                egui::vec2(176.0, 32.0),
                                 egui::TextEdit::singleline(&mut self.search)
                                     .hint_text("Filter…")
                                     .vertical_align(egui::Align::Center),
@@ -655,7 +659,7 @@ impl App {
                                     // back and push the buttons further right each frame).
                                     let gap = ui.spacing().item_spacing.x;
                                     let full = ui.available_width();
-                                    let right_w = 370.0_f32.min((full - gap - 120.0).max(120.0));
+                                    let right_w = 392.0_f32.min((full - gap - 120.0).max(120.0));
                                     let left_w = full - right_w - gap;
                                     ui.with_layout(
                                         egui::Layout::left_to_right(egui::Align::Min),
@@ -2261,16 +2265,16 @@ fn fill_glow(
 /// (egui's default font has no check glyph) and the whole thing is sized to the
 /// 30px row height so it vertically centers with the buttons beside it.
 /// A small rounded pill badge: `text` in `color` on a faint tint of it (the
-/// same style as the platform badges). Vertically centered in a 30px row.
+/// same style as the platform badges). Vertically centered in a 32px row.
 fn pill_badge(ui: &mut egui::Ui, text: &str, color: Color32) {
-    let font = egui::FontId::new(11.0, egui::FontFamily::Proportional);
+    let font = egui::FontId::new(12.0, egui::FontFamily::Proportional);
     let galley = ui
         .ctx()
         .fonts(|f| f.layout_no_wrap(text.to_owned(), font, color));
     let (pad_x, pad_y) = (9.0, 3.0);
     let pill = egui::vec2(galley.size().x + pad_x * 2.0, galley.size().y + pad_y * 2.0);
     // Reserve the row height so the pill centers with the buttons beside it.
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(pill.x, 30.0), egui::Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(pill.x, 32.0), egui::Sense::hover());
     let brect = egui::Rect::from_center_size(rect.center(), pill);
     let radius = egui::CornerRadius::same((pill.y * 0.5) as u8);
     let fill = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 38);
@@ -2295,6 +2299,17 @@ fn pill_badge(ui: &mut egui::Ui, text: &str, color: Color32) {
 
 /// A tonal button: accent text, faint accent fill, thin accent border. Greyed
 /// out when `enabled` is false (for not-yet-applicable actions).
+/// Lower the alpha of the default (grey) button fills so the plain buttons in
+/// the top/remote bars read as semi-translucent. Accent-filled buttons (Sync
+/// all, Save) set their own `.fill()` and are left fully opaque.
+fn translucent_button_fills(ui: &mut egui::Ui) {
+    let w = &mut ui.visuals_mut().widgets;
+    for st in [&mut w.inactive, &mut w.hovered, &mut w.active] {
+        let c = st.weak_bg_fill;
+        st.weak_bg_fill = Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), 150);
+    }
+}
+
 fn tonal_button(ui: &mut egui::Ui, text: &str, accent: Color32, enabled: bool) -> egui::Response {
     let btn = egui::Button::new(RichText::new(text).color(accent))
         .fill(accent.gamma_multiply(0.10))
@@ -2381,7 +2396,7 @@ fn title_with_badge(ui: &mut egui::Ui, name: &str, platform: &str) {
 
 /// A sliding on/off switch. Returns a response whose `.changed()` reflects toggles.
 fn toggle_switch(ui: &mut egui::Ui, on: &mut bool, accent: Color32) -> egui::Response {
-    let size = egui::vec2(34.0, 18.0);
+    let size = egui::vec2(38.0, 20.0);
     let (rect, mut resp) = ui.allocate_exact_size(size, egui::Sense::click());
     if resp.clicked() {
         *on = !*on;
