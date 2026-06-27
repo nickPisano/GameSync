@@ -2049,8 +2049,10 @@ fn glow_layers() -> [(f32, u8); GLOW_N] {
         // t: ~0 at the outermost (largest, faintest) ring → ~1 nearest the button.
         let t = (i as f32 + 1.0) / GLOW_N as f32;
         let grow = MAX_GROW * (1.0 - t);
-        // Quadratic build-up: very faint out wide, ramping toward the edge.
-        let alpha = (4.0 + 11.0 * t * t).round() as u8;
+        // Quadratic build-up: very faint out wide, ramping gently toward the
+        // edge. Low per-ring alpha keeps the stacked halo a soft bloom rather
+        // than a blinding glow.
+        let alpha = (0.5 + 2.0 * t * t).round() as u8;
         *layer = (grow, alpha);
     }
     out
