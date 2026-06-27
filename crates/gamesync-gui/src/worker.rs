@@ -14,8 +14,8 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 use gamesync_core::{
-    AutoSyncSettings, BackupOptions, ConflictChoice, Diff, Engine, Game, PluginList, SaveFile,
-    Snapshot, StorageReport, SyncOutcome,
+    AutoSyncSettings, BackupOptions, BeaconHandle, ConflictChoice, Diff, Engine, Game,
+    LanServerHandle, PluginList, SaveFile, Snapshot, StorageReport, SyncOutcome,
 };
 
 use crate::util::short;
@@ -83,6 +83,8 @@ pub enum Cmd {
     },
     SetCommandsAllowed(bool),
     DiscoverLan,
+    StartLanHost,
+    StopLanHost,
     CheckUpdate,
     SyncAll,
     Tick,
@@ -118,6 +120,8 @@ pub enum Evt {
     RecoveryKey(String),
     Plugins(PluginList),
     LanHosts(Vec<(String, String)>),
+    /// `Some(spec)` once this device starts hosting, `None` when it stops.
+    LanHosting(Option<String>),
     Update(Option<String>),
     Conflict {
         game: String,
@@ -180,9 +184,16 @@ fn meta(engine: &Engine, data_dir: &Path) -> Meta {
     }
 }
 
+/// A running LAN host: the server + discovery beacon. Dropping it stops both.
+struct LanHost {
+    _handle: LanServerHandle,
+    _beacon: BeaconHandle,
+}
+
 fn run(rx: Receiver<Cmd>, emit: impl Fn(Evt)) {
     let data_dir = Engine::default_data_dir();
     let mut engine: Option<Engine> = None;
+    let mut lan_host: Option<LanHost> = None;
 
     if Engine::is_encrypted(&data_dir) {
         emit(Evt::Locked);
@@ -204,7 +215,7 @@ fn run(rx: Receiver<Cmd>, emit: impl Fn(Evt)) {
             tick(&engine, &mut prev_running, &mut last_pass, &emit);
             continue;
         }
-        handle(cmd, &mut engine, &data_dir, &emit);
+        handle(cmd, &mut engine, &mut lan_host, &data_dir, &emit);
     }
 }
 
@@ -341,7 +352,13 @@ fn note(r: gamesync_core::Result<()>, ok_msg: &str, emit: &impl Fn(Evt)) -> bool
     }
 }
 
-fn handle(cmd: Cmd, engine: &mut Option<Engine>, data_dir: &Path, emit: &impl Fn(Evt)) {
+fn handle(
+    cmd: Cmd,
+    engine: &mut Option<Engine>,
+    lan_host: &mut Option<LanHost>,
+    data_dir: &Path,
+    emit: &impl Fn(Evt),
+) {
     // Unlock is the one command that creates the engine.
     if let Cmd::Unlock(pass) = cmd {
         emit(Evt::Busy(true));
@@ -583,6 +600,38 @@ fn handle(cmd: Cmd, engine: &mut Option<Engine>, data_dir: &Path, emit: &impl Fn
             )),
             Err(err) => emit(Evt::Error(err.to_string())),
         },
+        Cmd::StartLanHost => {
+            // Share a `lan-share` folder as the remote (so this device's saves
+            // land in the shared store), serve it over TCP, and advertise it.
+            let share = data_dir.join("lan-share");
+            let started = (|| -> gamesync_core::Result<String> {
+                std::fs::create_dir_all(&share)?;
+                e.set_remote(&share)?;
+                let token = gamesync_core::util::new_id();
+                let handle = Engine::serve_lan(share.clone(), &token, "0.0.0.0:0")?;
+                let ip = Engine::local_ip().unwrap_or_else(|| "127.0.0.1".to_string());
+                let port = handle.port;
+                let beacon = Engine::announce_lan(&Engine::lan_hostname(), port)?;
+                *lan_host = Some(LanHost {
+                    _handle: handle,
+                    _beacon: beacon,
+                });
+                Ok(format!("lan:{token}@{ip}:{port}"))
+            })();
+            match started {
+                Ok(spec) => {
+                    emit(Evt::Opened(meta(e, data_dir))); // remote now points at the share
+                    emit(Evt::LanHosting(Some(spec)));
+                    emit(Evt::Info("Hosting on this network.".to_string()));
+                }
+                Err(err) => emit(Evt::Error(format!("Couldn't start hosting: {err}"))),
+            }
+        }
+        Cmd::StopLanHost => {
+            *lan_host = None; // dropping the handle stops the server + beacon
+            emit(Evt::LanHosting(None));
+            emit(Evt::Info("Stopped hosting.".to_string()));
+        }
         Cmd::CheckUpdate => emit(Evt::Update(check_update())),
         Cmd::SyncAll => match e.auto_sync_pass() {
             Ok(rep) => {

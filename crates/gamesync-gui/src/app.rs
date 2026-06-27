@@ -123,6 +123,8 @@ pub struct App {
     plugins: Option<PluginList>,
 
     lan_hosts: Vec<(String, String)>,
+    /// The connect spec (`lan:token@ip:port`) when this device is hosting.
+    lan_hosting: Option<String>,
     update_status: Option<String>,
 
     custom_theme: Option<Custom>,
@@ -206,6 +208,7 @@ impl App {
             show_plugins: false,
             plugins: None,
             lan_hosts: Vec::new(),
+            lan_hosting: None,
             update_status: None,
             custom_theme: loaded.custom,
             use_custom: loaded.use_custom,
@@ -273,6 +276,7 @@ impl App {
                 Evt::RecoveryKey(k) => self.recovery_key = Some(k),
                 Evt::Plugins(p) => self.plugins = Some(p),
                 Evt::LanHosts(h) => self.lan_hosts = h,
+                Evt::LanHosting(spec) => self.lan_hosting = spec,
                 Evt::Update(opt) => {
                     self.update_status = Some(match opt {
                         Some(v) => format!("Update available: v{v}"),
@@ -930,7 +934,9 @@ impl App {
                     .show(ui, |ui| {
                     ui.heading("Appearance");
                     ui.add_space(4.0);
-                    ui.horizontal_wrapped(|ui| {
+                    // A plain horizontal row keeps the swatches on one baseline;
+                    // horizontal_wrapped staggers them vertically.
+                    ui.horizontal(|ui| {
                         for t in Theme::ALL {
                             let selected = !self.use_custom && self.theme == t;
                             if let ThemePick::Select = theme_choice(
@@ -1044,6 +1050,33 @@ impl App {
 
                     ui.separator();
                     ui.heading("LAN");
+                    // Host: share this device's saves so other devices can sync to it.
+                    if let Some(spec) = self.lan_hosting.clone() {
+                        ui.label(
+                            RichText::new("Hosting on this network. On another device, paste:")
+                                .weak(),
+                        );
+                        ui.horizontal(|ui| {
+                            // Editable view of a per-frame clone — selectable to
+                            // copy, but edits are discarded (reset each frame).
+                            let mut display = spec.clone();
+                            ui.add(
+                                egui::TextEdit::singleline(&mut display)
+                                    .desired_width(260.0)
+                                    .font(egui::TextStyle::Monospace),
+                            );
+                            if ui.button("Copy").clicked() {
+                                ui.ctx().copy_text(spec.clone());
+                            }
+                        });
+                        if ui.button("Stop hosting").clicked() {
+                            let _ = tx.send(Cmd::StopLanHost);
+                        }
+                    } else if ui.button("Host on this network").clicked() {
+                        let _ = tx.send(Cmd::StartLanHost);
+                    }
+                    ui.add_space(4.0);
+                    // Find: discover other devices already hosting.
                     ui.horizontal(|ui| {
                         if ui.button("Find LAN hosts").clicked() {
                             let _ = tx.send(Cmd::DiscoverLan);
