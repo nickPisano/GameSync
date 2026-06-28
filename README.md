@@ -36,35 +36,37 @@ compile it yourself? See [Build from source](#build-from-source) below.
 
 ### Download a prebuilt build (recommended)
 
-**1. Get the file for your OS.** Open the [**Releases**](https://github.com/nickPisano/GameSync/releases)
-page, expand the latest version's **Assets**, and download either an
-**installer** or a **portable** build (`<ver>` is the version number in the
-filename, e.g. `0.3.0`). None of them need a WebView runtime — the app is a
-native window:
+**1. Find your system and grab a file.** Open the [**Releases**](https://github.com/nickPisano/GameSync/releases)
+page, expand the latest version's **Assets**, and download the row that matches
+you (`<ver>` is the version in the filename, e.g. `0.3.0`). Every file is a
+native window — **none need a WebView runtime**. Pick the **installer** for the
+normal experience, or a **portable** build to just run it with no install:
 
 | Your system | Installer | Portable (no install — just run) |
 | --- | --- | --- |
-| **macOS** (Intel *or* Apple Silicon) | `GameSync_<ver>_universal.dmg` | the **GameSync.app** inside that `.dmg`, or `GameSync_<ver>_macos-universal` |
-| **Windows x64** | `GameSync_<ver>_x64_en-US.msi` *or* `…_x64-setup.exe` | `GameSync_<ver>_windows-x64-portable.exe` |
-| **Windows arm64** | `GameSync_<ver>_arm64_en-US.msi` *or* `…_arm64-setup.exe` | `GameSync_<ver>_windows-arm64-portable.exe` |
-| **Linux x64** | `GameSync_<ver>_amd64.deb` *or* `…_x86_64.AppImage` | `GameSync_<ver>_linux-x64` |
-| **Linux arm64** | `GameSync_<ver>_arm64.deb` *or* `…_aarch64.AppImage` | `GameSync_<ver>_linux-arm64` |
+| **macOS** (Intel *or* Apple Silicon) | `GameSync_<ver>_universal.dmg` | `GameSync_<ver>_macos-universal` |
+| **Windows** (most PCs, x64) | `GameSync_<ver>_x64-setup.exe` *(or `…_x64_en-US.msi`)* | `GameSync_<ver>_windows-x64-portable.exe` |
+| **Windows on ARM** | `GameSync_<ver>_arm64-setup.exe` | `GameSync_<ver>_windows-arm64-portable.exe` |
+| **Linux** (x64) | `GameSync_<ver>_amd64.deb` *(or `…_x86_64.AppImage`)* | `GameSync_<ver>_linux-x64` |
+| **Linux on ARM** | `GameSync_<ver>_arm64.deb` *(or `…_aarch64.AppImage`)* | `GameSync_<ver>_linux-arm64` |
 
-> **Which architecture?** The macOS build is *universal* (runs on both), so just
-> take the `.dmg`. On **Windows**: Settings → System → About → *System type*. On
-> **Linux**: run `uname -m` (`x86_64` → x64, `aarch64` → arm64). *(Fedora/RHEL:
-> use the `.AppImage` — no `.rpm` is published.)*
+> **Not sure which?** macOS is one *universal* `.dmg` (runs on Intel and Apple
+> Silicon). On **Windows**: Settings → System → About → *System type* (most PCs
+> are x64; "ARM-based processor" → use the ARM files). On **Linux**: run
+> `uname -m` (`x86_64` → x64, `aarch64` → ARM). The `.deb` is for Debian/Ubuntu;
+> on any other distro (incl. **Fedora/RHEL** — no `.rpm` is published) use the
+> `.AppImage`. Windows on ARM has no `.msi` — use the `-setup.exe`.
 
 **2. Install or run it:**
 
-- **macOS** — open the `.dmg`, drag **GameSync** into **Applications**, launch
-  it. (Or run the portable binary: `chmod +x GameSync_<ver>_macos-universal && ./GameSync_<ver>_macos-universal`.)
-- **Windows** — run the `.msi` or `-setup.exe` to install, **or** just
-  double-click the `-portable.exe` to run with no install. No WebView2 Runtime
-  needed.
-- **Linux** — installer: `sudo apt install ./GameSync_<ver>_amd64.deb`. Portable:
-  `chmod +x GameSync_<ver>_x86_64.AppImage && ./GameSync_<ver>_x86_64.AppImage`
-  (or the bare `GameSync_<ver>_linux-x64` binary).
+- **macOS** — open the `.dmg`, drag **GameSync** into **Applications**, and launch
+  it. *(Portable instead: `chmod +x GameSync_<ver>_macos-universal && ./GameSync_<ver>_macos-universal`.)*
+- **Windows** — double-click the `-setup.exe` to install (x64 also offers an
+  `.msi` for managed deployments), **or** just run the `-portable.exe` with no
+  install. No WebView2 Runtime needed.
+- **Linux** — Debian/Ubuntu: `sudo apt install ./GameSync_<ver>_amd64.deb`. Any
+  other distro: `chmod +x GameSync_<ver>_x86_64.AppImage && ./GameSync_<ver>_x86_64.AppImage`.
+  *(Or the bare portable binary: `chmod +x GameSync_<ver>_linux-x64 && ./GameSync_<ver>_linux-x64`.)*
 
 > **First run shows an "unidentified developer" warning.** The builds aren't
 > code-signed yet, so the OS blocks them by default. It's safe to allow:
