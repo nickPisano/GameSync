@@ -707,13 +707,39 @@ impl App {
                                                         .small(),
                                                     );
                                                     if self.auto_sync.backup_on_exit {
-                                                        ui.label(
+                                                        if g.install_dir.is_some() {
+                                                            ui.label(
                                                         RichText::new(
                                                             "backs up automatically when it closes",
                                                         )
                                                         .weak()
                                                         .small(),
                                                     );
+                                                        } else if ui
+                                                            .link(
+                                                                RichText::new(
+                                                                    "Set up auto-backup on exit…",
+                                                                )
+                                                                .color(accent)
+                                                                .small(),
+                                                            )
+                                                            .on_hover_text(
+                                                                "Pick the game's install folder so \
+                                                                 GameSync can back up a few seconds \
+                                                                 after it closes",
+                                                            )
+                                                            .clicked()
+                                                        {
+                                                            // Open per-game settings at the
+                                                            // close-detection section.
+                                                            self.gs_game = Some(g.id.clone());
+                                                            self.gs_extra = g
+                                                                .extra_roots
+                                                                .iter()
+                                                                .map(|p| p.display().to_string())
+                                                                .collect();
+                                                            self.gs_exe = String::new();
+                                                        }
                                                     }
                                                     if let Some((local, remote)) =
                                                         self.conflicts.get(&g.id).cloned()
