@@ -380,6 +380,67 @@ fn encrypted_store_roundtrip_and_at_rest() {
 }
 
 #[test]
+fn disable_encryption_decrypts_store_and_keeps_saves() {
+    let tmp = tempfile::tempdir().unwrap();
+    let data_dir = tmp.path().join("data");
+    let save = tmp.path().join("save");
+    fs::create_dir_all(&save).unwrap();
+
+    Engine::init_encryption(&data_dir, "correct horse battery staple").unwrap();
+    let engine = Engine::unlock(data_dir.clone(), "correct horse battery staple").unwrap();
+
+    let secret = "PLAYER_GOLD=999999;BOSS_KILLED=true";
+    write(&save.join("profile.sav"), secret);
+    let game = engine.add_manual_game("RPG", save.clone()).unwrap();
+    let v1 = engine.backup(&game.id, BackupOptions::default()).unwrap();
+    assert_eq!(v1.file_count(), 1);
+
+    // Objects carry the GSE1 encryption header before disabling.
+    for obj in walkdir(&data_dir.join("store")) {
+        if !obj.to_string_lossy().contains(".incoming") {
+            assert_eq!(&fs::read(&obj).unwrap()[..4], b"GSE1");
+        }
+    }
+
+    // Disable: decrypts every object in place, then removes the keystore.
+    engine.disable_encryption().unwrap();
+    assert!(!Engine::is_encrypted(&data_dir));
+    drop(engine);
+
+    // The store now opens plaintext with no passphrase, and integrity holds.
+    let plain = Engine::open(data_dir.clone()).unwrap();
+    assert!(plain.verify().unwrap().ok());
+
+    // No object carries the encryption header anymore.
+    for obj in walkdir(&data_dir.join("store")) {
+        if obj.to_string_lossy().contains(".incoming") {
+            continue;
+        }
+        let bytes = fs::read(&obj).unwrap();
+        assert!(
+            bytes.len() < 4 || &bytes[..4] != b"GSE1",
+            "object should be decrypted"
+        );
+    }
+
+    // The save still restores correctly from the now-plaintext store.
+    fs::remove_dir_all(&save).unwrap();
+    plain
+        .restore_with(
+            &game.id,
+            &v1.version_id,
+            RestoreOptions {
+                safety_snapshot: false,
+            },
+        )
+        .unwrap();
+    assert_eq!(read(&save.join("profile.sav")), secret);
+
+    // Idempotent: disabling again on a plaintext store is a harmless no-op.
+    plain.disable_encryption().unwrap();
+}
+
+#[test]
 fn sync_two_devices_push_pull_and_conflict() {
     let tmp = tempfile::tempdir().unwrap();
     let remote = tmp.path().join("remote"); // a shared folder (think Dropbox/Drive)

@@ -1,0 +1,40 @@
+[package]
+name = "gamesync-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# GameSync's desktop UI: a native, webview-free app built on egui/eframe. It
+# replaced the original Tauri/WebView2 shell so the shipped binary embeds no
+# browser engine at all.
+
+[dependencies]
+gamesync-core = { path = "../gamesync-core" }
+eframe = "0.31"
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Native OS file/folder dialogs (no webview). Uses GTK on Linux, Cocoa on
+# macOS, the native dialog on Windows.
+rfd = "0.15"
+# System tray icon + menu (close-to-tray).
+tray-icon = "0.19"
+# Decode the brand PNG for the topbar logo (png only; same version eframe uses).
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+# ── Native installers via `cargo packager` ────────────────────────────────────
+# Builds OS installers from the self-contained binary (no webview, no Tauri).
+# Usage: build the binary first, then run the packager:
+#   cargo build --release -p gamesync-gui
+#   cargo packager --release -p gamesync-gui -f dmg   # (or wix/nsis/deb/appimage)
+# The release CI builds every format per OS and attaches them to the release.
+[package.metadata.packager]
+product-name = "GameSync"
+identifier = "com.gamesync.app"
+description = "Back up and sync your game saves safely."
+long-description = "GameSync snapshots and replicates game save folders for games without reliable cloud saves — version history, safe restores, optional encryption, and folder/rclone/LAN sync."
+homepage = "https://github.com/nickPisano/GameSync"
+authors = ["nickPisano"]
+category = "Utility"
+# One icon per platform: .ico (Windows), .icns (macOS), .png (Linux).
+icons = ["assets/icon.ico", "assets/AppIcon.icns", "assets/brand.png"]

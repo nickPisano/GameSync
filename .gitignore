@@ -12,17 +12,7 @@ Cargo.lock.orig
 .idea/
 .vscode/
 
-# Node / Tauri frontend
-node_modules/
-dist/
-/src-tauri/gen/
-
-# Mobile icon sets (desktop-only project)
-/src-tauri/icons/android/
-/src-tauri/icons/ios/
-
 # Signing secrets — never commit
 *.p12
 *.cer
-/src-tauri/*.key
-TAURI_SIGNING_PRIVATE_KEY*
+*.key

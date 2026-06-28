@@ -9,7 +9,7 @@
 //!  - **Append-only history.** Versions are immutable; restores are undoable.
 //!  - **Integrity by construction.** Content addressing + checksums everywhere.
 //!
-//! The public entry point is [`Engine`]. The Tauri UI and the CLI are both thin
+//! The public entry point is [`Engine`]. The egui GUI and the CLI are both thin
 //! layers over it.
 
 pub mod cas;

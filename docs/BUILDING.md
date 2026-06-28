@@ -1,115 +1,132 @@
 # Building & signing releases
 
-`npm run tauri build` produces bundles in **`target/release/bundle/`** (the
-workspace-root `target/`, not `src-tauri/`) for the OS you run it on. The bare
-executable (the "portable" build) sits one level up at `target/release/`.
+The desktop app is the native **egui/eframe** crate `gamesync-gui` — no Node,
+no WebView, no Tauri. A release build is a single, self-contained executable:
 
-| OS | Installer | Portable |
+```sh
+cargo build --release -p gamesync-gui
+```
+
+The binary lands at **`target/release/gamesync-gui`** (`.exe` on Windows). That
+bare executable *is* the "portable" build — copy it anywhere and run it.
+
+| OS | Portable binary | Notes |
 | --- | --- | --- |
-| **macOS** | `.dmg` | `.app` (drag-to-run, shipped inside the `.dmg`) |
-| **Windows** | `.msi` (WiX) + `.exe` (NSIS setup) | `target/release/GameSync.exe` (needs WebView2, preinstalled on Win10+) |
-| **Linux** | `.deb` + `.rpm` | `.AppImage` |
+| **macOS** | `target/release/gamesync-gui` | Wrap in a `.app` bundle for a Dock icon (see below). |
+| **Windows** | `target/release/gamesync-gui.exe` | No WebView2 or VC++ redistributable needed (CRT is statically linked in CI). |
+| **Linux** | `target/release/gamesync-gui` | Dynamically links system GTK/X11 libs only. |
 
-`bundle.targets` is `"all"` in `tauri.conf.json`, so every format for the host OS
-is emitted. These work locally **unsigned**, but other machines will warn (or
-refuse) to run them. Signing requires *your own* certificates — Claude can't and
-shouldn't handle those, so this is the manual step. The icon set is already wired
-up (`src-tauri/icons/`, regenerate with `npm run tauri icon src-tauri/icons/icon.png`).
+## Native installers (`cargo-packager`)
+
+OS installers are built from that same binary with
+[`cargo-packager`](https://github.com/crabnebula-dev/cargo-packager) — a
+framework-agnostic bundler (no Tauri, no webview). The bundle config lives in
+`[package.metadata.packager]` in `crates/gamesync-gui/Cargo.toml` (product name,
+identifier, icons in `crates/gamesync-gui/assets/`).
+
+```sh
+cargo install cargo-packager --locked     # one time
+cargo build --release -p gamesync-gui     # build the binary first
+cargo packager --release -p gamesync-gui -f dmg   # then package
+```
+
+`-f` selects the format(s) for the current OS; the bundles land next to the
+binary in `target/release/`:
+
+| OS | `-f` formats | Output |
+| --- | --- | --- |
+| **macOS** | `app`, `dmg` | `GameSync.app`, `GameSync_<ver>_<arch>.dmg` |
+| **Windows** | `wix`, `nsis` | `…_en-US.msi`, `…-setup.exe` (cargo-packager auto-downloads WiX / NSIS) |
+| **Linux** | `deb`, `appimage` | `…_<arch>.deb`, `…_<arch>.AppImage` (AppImage needs `libfuse2`) |
+
+> `.rpm` is the one old Tauri format cargo-packager can't produce. Fedora/RHEL
+> users can run the `.AppImage`, or add `cargo-generate-rpm` if a native `.rpm`
+> is needed.
 
 ## Targets & architectures
 
 Releases cover **macOS (universal), Windows x64 + arm64, and Linux x64 + arm64**.
-You build each architecture on a matching machine — the
+Each architecture is built on a matching machine — the
 [`Release` workflow](../.github/workflows/release.yml) does this automatically on
-a tag push (`git tag v0.1.0 && git push origin v0.1.0`), using GitHub's native
+a tag push (`git tag v0.3.0 && git push origin v0.3.0`), using GitHub's native
 ARM runners (`windows-11-arm`, `ubuntu-22.04-arm`) so nothing is cross-compiled.
 
 To build a specific target **locally**:
 
 ```sh
-# macOS universal (one app/dmg that runs on Apple Silicon AND Intel):
+# macOS universal (one binary that runs on Apple Silicon AND Intel):
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
-npm run tauri build -- --target universal-apple-darwin
+cargo build --release -p gamesync-gui --target aarch64-apple-darwin
+cargo build --release -p gamesync-gui --target x86_64-apple-darwin
+lipo -create -output gamesync-gui-universal \
+  target/aarch64-apple-darwin/release/gamesync-gui \
+  target/x86_64-apple-darwin/release/gamesync-gui
 
-# Windows arm64, cross-compiled from an x64 Windows host (MSVC supports this):
-rustup target add aarch64-pc-windows-msvc
-npm run tauri build -- --target aarch64-pc-windows-msvc
+# Windows: statically link the CRT so the .exe needs no VC++ redistributable.
+$env:RUSTFLAGS = "-C target-feature=+crt-static"   # PowerShell
+cargo build --release -p gamesync-gui
 
 # Linux arm64: build on real arm64 hardware (or the ubuntu-22.04-arm CI runner).
-# Cross-compiling Linux arm64 + AppImage from x64 is painful (webkit2gtk multiarch,
-# AppImage tooling) — prefer a native arm64 box.
 ```
 
-Omit `--target` to build for the host architecture (the common case).
+Omit `--target` to build for the host architecture (the common case). The Linux
+build needs the GUI dev libraries: `build-essential libssl-dev libgtk-3-dev
+libxkbcommon-dev libayatana-appindicator3-dev` (plus the `libxcb-*` packages the
+CI workflow installs).
 
-> **Never commit** certificates, `.p12`/`.key` files, passwords, or the updater
-> private key. Use environment variables locally and encrypted CI secrets.
-> `.gitignore` already excludes the common ones.
+> **Never commit** certificates, `.p12`/`.cer`/`.key` files, or passwords. Use
+> environment variables locally and encrypted CI secrets. `.gitignore` already
+> excludes the common ones.
 
-## macOS — sign & notarize
+## macOS — bundle, sign & notarize
 
-You need an Apple Developer account and a **Developer ID Application**
-certificate in your Keychain. Tauri reads these env vars at build time:
+For a double-clickable app, wrap the binary in a minimal `.app` bundle
+(`Contents/MacOS/gamesync-gui`, `Contents/Info.plist`, an `AppIcon.icns`), then
+sign and notarize with Apple's own tools (no Tauri involved):
 
 ```sh
-export APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
-# notarization (app-specific password from appleid.apple.com):
-export APPLE_ID="you@example.com"
-export APPLE_PASSWORD="abcd-efgh-ijkl-mnop"
-export APPLE_TEAM_ID="TEAMID"
+# Ad-hoc sign (runs locally, still warns on other machines):
+codesign --force --deep --sign - GameSync.app
 
-npm run tauri build
+# Trusted build — needs a "Developer ID Application" cert in your Keychain:
+codesign --force --deep --options runtime \
+  --sign "Developer ID Application: Your Name (TEAMID)" GameSync.app
+xcrun notarytool submit GameSync.app --apple-id you@example.com \
+  --team-id TEAMID --password "app-specific-pw" --wait
+xcrun stapler staple GameSync.app
 ```
 
-Tauri signs the `.app`/`.dmg` and submits for notarization automatically when
-these are set. Verify afterwards with `spctl -a -vvv "path/to/GameSync.app"`.
+Verify afterwards with `spctl -a -vvv GameSync.app`.
 
 ## Windows — sign
 
-With a code-signing certificate, set its thumbprint in
-`src-tauri/tauri.conf.json` under `bundle.windows`:
+With a code-signing certificate, sign the `.exe` directly:
 
-```json
-"windows": { "certificateThumbprint": "AABBCC…", "digestAlgorithm": "sha256",
-             "timestampUrl": "http://timestamp.digicert.com" }
+```sh
+signtool sign /fd sha256 /tr http://timestamp.digicert.com /td sha256 \
+  /a target\release\gamesync-gui.exe
 ```
 
-or use cloud signing (Azure Trusted Signing) per the Tauri docs. Then
-`npm run tauri build`.
+or use cloud signing (Azure Trusted Signing). Code signing is the durable fix for
+SmartScreen/Gatekeeper warnings — independent of the framework.
 
 ## Linux
 
-AppImage/deb are typically distributed unsigned; if you publish an apt repo you
-can GPG-sign it. No app-level signing is required to run them.
-
-## Auto-updater signing (when the updater is added)
-
-The updater isn't wired up yet, but when it is, releases must be signed with a
-Tauri updater key:
-
-```sh
-npm run tauri signer generate -- -w ~/.tauri/gamesync_updater.key
-```
-
-This prints a **public key** (put it in `tauri.conf.json` →
-`plugins.updater.pubkey`) and writes a **private key** (keep it secret; expose
-to the build via `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`).
-The updater verifies each release against the public key.
+The bare binary and any `.AppImage` you choose to build are typically
+distributed unsigned; if you publish an apt/rpm repo you can GPG-sign it. No
+app-level signing is required to run them.
 
 ## CI (automated releases)
 
 [`.github/workflows/release.yml`](../.github/workflows/release.yml) runs on a
-`v*` tag push and builds all five targets in parallel via `tauri-action`, which
-compiles, (optionally) signs, and attaches the installers to a **draft** GitHub
-release; an extra step uploads the portable Windows `.exe`. To ship:
+`v*` tag push, builds all five targets in parallel, packages each with
+cargo-packager (macOS `.dmg`; Windows `.msi` + setup `.exe`; Linux `.deb` +
+`.AppImage`), and attaches the installers **plus** a raw/portable binary to a
+**draft** GitHub release via `softprops/action-gh-release`. To ship:
 
-1. Add any signing values as encrypted **repository secrets** (Settings → Secrets
-   and variables → Actions): `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
-   `APPLE_PASSWORD`, `APPLE_TEAM_ID` (and the Windows cert thumbprint in
-   `tauri.conf.json`). Unset secrets simply produce unsigned builds.
-2. Bump `version` in `src-tauri/tauri.conf.json`, then
+1. Bump `version` in the workspace `Cargo.toml`, commit, then
    `git tag vX.Y.Z && git push origin vX.Y.Z`.
-3. Wait for the matrix to finish, review the draft release, and **Publish**.
+2. Wait for the matrix to finish, review the draft release, and **Publish**.
 
 > The ARM runners (`windows-11-arm`, `ubuntu-22.04-arm`) are free for public
 > repos; on a private repo they may require a paid plan — swap arm64 entries for

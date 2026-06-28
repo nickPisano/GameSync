@@ -280,6 +280,27 @@ impl Engine {
         Ok(recovery)
     }
 
+    /// Disable client-side encryption: decrypt every stored object back to
+    /// plaintext-at-rest (the compression mode is preserved) and remove the
+    /// keystore. Your saves stay intact — only the at-rest encryption is undone.
+    ///
+    /// The store must be currently unlocked (this engine holds the data key).
+    /// Objects are decrypted *before* the keystore is removed, so an interruption
+    /// is recoverable: the keystore stays until the data is fully plaintext, and
+    /// re-running finishes the job (only still-encrypted objects are rewritten).
+    /// After this returns, reopen the store with [`Engine::open`].
+    pub fn disable_encryption(&self) -> Result<()> {
+        if !self.cas.is_encrypted() {
+            return Ok(());
+        }
+        self.cas.decrypt_all_to_plaintext()?;
+        let ks = Self::keystore_path(&self.data_dir);
+        if ks.is_file() {
+            std::fs::remove_file(&ks)?;
+        }
+        Ok(())
+    }
+
     /// Open an encrypted store using the passphrase.
     pub fn unlock(data_dir: PathBuf, passphrase: &str) -> Result<Self> {
         let keystore = Self::load_keystore(&data_dir)?;

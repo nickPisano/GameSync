@@ -278,6 +278,38 @@ impl Cas {
             .unwrap_or(0)
     }
 
+    /// Rewrite every still-encrypted object as plaintext-at-rest, for disabling
+    /// encryption. Only the AEAD layer is stripped: the decrypted inner payload
+    /// is exactly the plaintext-mode on-disk form (raw bytes, or `lzma2(...)`
+    /// when compression is on), so the compression mode is preserved. Only
+    /// `GSE1`-tagged objects are touched, making the operation idempotent and
+    /// safe to re-run if it was interrupted. Requires the store be unlocked.
+    pub fn decrypt_all_to_plaintext(&self) -> Result<()> {
+        let cipher = self
+            .cipher
+            .as_ref()
+            .ok_or_else(|| Error::other("store is not encrypted"))?;
+        for hash in self.list_objects()? {
+            let path = self.object_path(&hash);
+            let blob = fs::read(&path)?;
+            if blob.len() < ENC_MAGIC.len() || &blob[..ENC_MAGIC.len()] != ENC_MAGIC {
+                continue; // already plaintext (e.g. resuming an interrupted run)
+            }
+            let inner = decrypt_blob(cipher, &blob)?;
+            let tmp = self
+                .root
+                .join(".incoming")
+                .join(format!("dec-{}", new_id()));
+            {
+                let mut f = fs::File::create(&tmp)?;
+                f.write_all(&inner)?;
+                f.sync_all()?;
+            }
+            fs::rename(&tmp, &path)?;
+        }
+        Ok(())
+    }
+
     /// Remove an object from the store. Used only by the garbage collector after
     /// it has confirmed nothing references the hash.
     pub fn remove_object(&self, hash: &str) -> Result<()> {

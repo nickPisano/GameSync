@@ -16,8 +16,8 @@ product framing, see the project README.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  UI (Phase 1, next): Tauri v2 + React/TS                 │
-│  CLI (now): crates/gamesync-cli                          │
+│  GUI: crates/gamesync-gui  (native egui/eframe, no webview)│
+│  CLI: crates/gamesync-cli                                │
 ├─────────────────────────────────────────────────────────┤
 │  Engine: crates/gamesync-core  (Engine = entry point)    │
 │   detection │ snapshot │ restore │ process │ verify      │
@@ -26,8 +26,9 @@ product framing, see the project README.
 └──────────────┴───────────────────────┴──────────────────┘
 ```
 
-The CLI and the future Tauri UI are both thin layers over `Engine`. Keeping all
-stateful logic in `gamesync-core` means the UI is just presentation + IPC.
+The CLI and the egui GUI are both thin layers over `Engine`. Keeping all
+stateful logic in `gamesync-core` means the UI is just presentation; the GUI
+calls the engine directly on a worker thread (no IPC, no webview).
 
 ## Module map (`gamesync-core`)
 
@@ -122,15 +123,17 @@ history, sync off), so neither device's progress is discarded.
 
 - **Phase 0 (done):** core engine + CLI — safe snapshot/restore, CAS dedup,
   Steam detection, integrity.
-- **Phase 1 (done):** ✅ Tauri v2 + React desktop UI (library, version
-  history/restore, diff, remote config, conflict banner, settings, encryption
-  unlock), ✅ `FolderRemote` cross-device sync, ✅ conflict detection + manual
-  resolution, ✅ **system tray** (close-to-tray, Open/Sync/Quit menu), and
-  ✅ **background auto-sync** (timer-driven `auto_sync_pass`: back up changed
-  saves, sync enabled games, skip running games, surface conflicts),
-  ✅ **native folder picker** (`@tauri-apps/plugin-dialog` on Add Game + Remote +
-  wizard), and ✅ **first-run setup wizard** (mode → remote → encryption → scan &
-  select games). Phase 1 is feature-complete.
+- **Phase 1 (done):** ✅ native **egui/eframe** desktop UI — webview-free, calls
+  the engine directly on a worker thread (library, version history/restore, diff,
+  remote config, conflict banner, settings, encryption unlock),
+  ✅ `FolderRemote` cross-device sync, ✅ conflict detection + manual resolution,
+  ✅ **system tray** (close-to-tray, Open/Sync/Quit menu), and ✅ **background
+  auto-sync** (timer-driven `auto_sync_pass`: back up changed saves, sync enabled
+  games, skip running games, surface conflicts), ✅ **native folder picker** (via
+  `rfd` on Add Game + Remote + wizard), and ✅ **first-run setup wizard**
+  (mode → remote → encryption → scan & select games). Phase 1 is feature-complete.
+  (The original UI was a Tauri v2 + React shell; it was replaced by the native
+  egui app to eliminate the bundled browser engine.)
 - **Phase 2 (engine done; rest pending):** ✅ client-side encryption,
   ✅ emulator detection, ✅ **GOG (Galaxy) + Epic detection** (name-matched into
   the manifest), ✅ retention/GC, ✅ version diff. Remaining: signed auto-update,

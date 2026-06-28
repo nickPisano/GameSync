@@ -1,25 +1,24 @@
 name: Release
 
-# Build installable + portable bundles for every OS/arch and attach them to a
-# draft GitHub release. Trigger by pushing a version tag:
-#   git tag v0.1.0 && git push origin v0.1.0
+# Build the native (webview-free) egui app for every OS/arch, package OS
+# installers from it with cargo-packager, and attach both the installers and a
+# raw "portable" binary to a draft GitHub release. Trigger by pushing a tag:
+#   git tag v0.3.0 && git push origin v0.3.0
 #
 # Produced per target:
-#   macOS  (universal arm64+x64) : .dmg (installer) + .app (portable, in the dmg)
-#   Windows x64 / arm64          : .msi + NSIS setup .exe (installers) + bare .exe (portable)
-#   Linux  x64 / arm64           : .deb + .rpm (installers) + .AppImage (portable)
+#   macOS  (universal arm64+x64) : .dmg installer  + portable fat binary
+#   Windows x64 / arm64          : .msi + setup .exe + portable .exe (static CRT,
+#                                  no VC++ redistributable and no WebView2)
+#   Linux  x64 / arm64           : .deb + .AppImage + portable ELF binary
 #
-# Code signing is opt-in via secrets (none required for an unsigned build):
-#   macOS:   APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
-#   updater: TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD
-# See docs/BUILDING.md.
+# Builds are unsigned. (.rpm is the one old Tauri format cargo-packager can't
+# produce; Fedora/RHEL users can use the .AppImage. Code signing is opt-in and
+# documented in docs/BUILDING.md.)
 
 on:
   push:
     tags: ['v*']
 
-# The GITHUB_TOKEN must be able to create the release and upload assets.
-# (Repo default may be read-only; this grants write just for this workflow.)
 permissions:
   contents: write
 
@@ -29,105 +28,121 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: macOS (universal)
+          - name: macos-universal
             os: macos-latest
             rust-targets: aarch64-apple-darwin x86_64-apple-darwin
-            args: --target universal-apple-darwin
-          - name: Windows x64
+            formats: dmg
+          - name: windows-x64
             os: windows-latest
-            args: ''
-          - name: Windows arm64
+            rustflags: -C target-feature=+crt-static
+            formats: wix nsis
+          - name: windows-arm64
             os: windows-11-arm
-            args: ''
-          - name: Linux x64
+            rustflags: -C target-feature=+crt-static
+            formats: wix nsis
+          - name: linux-x64
             os: ubuntu-22.04
-            args: ''
-          - name: Linux arm64
+            formats: deb appimage
+          - name: linux-arm64
             os: ubuntu-22.04-arm
-            args: ''
+            formats: deb appimage
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Linux WebView/Tauri deps
+      # egui/winit + AppImage build dependencies (no WebView2/WebKit needed).
+      - name: Install Linux build deps
         if: startsWith(matrix.os, 'ubuntu')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            build-essential \
-            libssl-dev
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev libssl-dev libgtk-3-dev \
+            libayatana-appindicator3-dev libfuse2
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Add extra Rust targets
+      - name: Add extra Rust targets (macOS universal)
         if: matrix.rust-targets != ''
         run: rustup target add ${{ matrix.rust-targets }}
 
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
 
-      - name: Install frontend deps
-        run: npm ci
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --version 0.11.8 --locked
 
-      - name: Build & publish bundles
-        uses: tauri-apps/tauri-action@v0
+      - name: Build (host target)
+        if: matrix.rust-targets == ''
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Ad-hoc sign on macOS ("-") when no Developer ID secret is set, so the
-          # build succeeds unsigned. Set the APPLE_SIGNING_IDENTITY secret to a
-          # real "Developer ID Application: …" value for a trusted build, and add
-          # APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID here for notarization (see
-          # docs/BUILDING.md). Don't pass those three empty — empty creds make
-          # notarization fail.
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '-' }}
+          RUSTFLAGS: ${{ matrix.rustflags }}
+        run: cargo build --release -p gamesync-gui
+
+      - name: Build universal macOS binary
+        if: matrix.rust-targets != ''
+        run: |
+          cargo build --release -p gamesync-gui --target aarch64-apple-darwin
+          cargo build --release -p gamesync-gui --target x86_64-apple-darwin
+          # cargo-packager (no --target) looks for the binary in target/release,
+          # so place the fat binary there.
+          lipo -create -output target/release/gamesync-gui \
+            target/aarch64-apple-darwin/release/gamesync-gui \
+            target/x86_64-apple-darwin/release/gamesync-gui
+
+      - name: Package installers
+        shell: bash
+        run: |
+          fmt_args=""
+          for f in ${{ matrix.formats }}; do fmt_args="$fmt_args -f $f"; done
+          cargo packager --release -p gamesync-gui $fmt_args --verbose
+
+      - name: Collect release assets
+        shell: bash
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          mkdir -p out
+          # The portable (raw) binary.
+          case "${{ matrix.name }}" in
+            macos-universal) cp target/release/gamesync-gui "out/GameSync_${ver}_macos-universal" ;;
+            windows-*)       cp target/release/gamesync-gui.exe "out/GameSync_${ver}_${{ matrix.name }}-portable.exe" ;;
+            *)               cp target/release/gamesync-gui "out/GameSync_${ver}_${{ matrix.name }}" ;;
+          esac
+          # The installers cargo-packager produced (in target/release).
+          find target/release -maxdepth 1 -type f \
+            \( -name '*.dmg' -o -name '*.msi' -o -name '*-setup.exe' \
+               -o -name '*.deb' -o -name '*.AppImage' \) -exec cp {} out/ \;
+          # The macOS fat dmg is named by host arch (aarch64) — relabel universal.
+          for f in out/*_aarch64.dmg; do
+            [ -e "$f" ] && mv "$f" "${f/_aarch64.dmg/_universal.dmg}"
+          done
+          ls -l out
+
+      - name: Publish to draft release
+        uses: softprops/action-gh-release@v2
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'GameSync ${{ github.ref_name }}'
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.args }}
-          # Steer non-technical users to the right asset. Same text in every
-          # matrix job (idempotent); shown as the release description above the
-          # asset list. Files are named by suffix so this stays version-correct.
-          releaseBody: |
+          tag_name: ${{ github.ref_name }}
+          name: GameSync ${{ github.ref_name }}
+          draft: true
+          files: out/*
+          fail_on_unmatched_files: true
+          body: |
             ## Which file should I download?
 
-            Not sure? Most people just want the **installer** for their system:
+            Not sure? Most people want the **installer** for their system:
 
             | Your computer | Download this file |
             | --- | --- |
-            | **Windows** (most PCs) | the file ending in **`_x64-setup.exe`** |
-            | **Windows on ARM** | **`_arm64-setup.exe`** |
-            | **macOS** (Intel *or* Apple Silicon) | **`_universal.dmg`** |
-            | **Linux** (most distros) | **`_amd64.AppImage`** (run `chmod +x` on it, then launch) |
-            | **Linux on ARM** | **`_aarch64.AppImage`** |
+            | **Windows** (most PCs) | `…_windows-x64_…-setup.exe` (or the `.msi`) |
+            | **Windows on ARM** | `…_windows-arm64_…-setup.exe` |
+            | **macOS** (Intel *or* Apple Silicon) | `…_universal.dmg` |
+            | **Linux** (Debian/Ubuntu) | `…_amd64.deb` |
+            | **Linux** (other distros / portable) | `…_x86_64.AppImage` (`chmod +x`, then run) |
+            | **Linux on ARM** | `…_arm64.deb` or `…_aarch64.AppImage` |
 
-            **Prefer no install?** On Windows grab the `...-portable.exe` and just double-click it; the Linux `.AppImage` is already portable. **Debian/Ubuntu** can use the `.deb`, **Fedora/RHEL** the `.rpm`; the `.msi` is mainly for managed/enterprise installs.
+            **Prefer no install?** Grab the `…-portable.exe` (Windows) or the bare
+            `GameSync_…_macos-universal` / `…_linux-*` binary and just run it
+            (`chmod +x` it first on macOS/Linux).
 
-            > These builds are unsigned, so on first launch Windows SmartScreen or macOS Gatekeeper may warn you. Choose **More info -> Run anyway** (Windows) or right-click the app -> **Open** (macOS). Not sure if you need x64 or ARM? On Windows see **Settings -> System -> About -> System type**.
-
-      # tauri-action attaches the installers (.msi/.exe/.deb/.rpm/.AppImage/.dmg)
-      # but not the raw Windows executable, which is the "portable" build.
-      - name: Attach portable Windows .exe
-        if: runner.os == 'Windows'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          arch=$(echo "${{ runner.arch }}" | tr 'A-Z' 'a-z')
-          ver="${{ github.ref_name }}"; ver="${ver#v}"
-          # The compiled binary is the cargo bin name (gamesync-app), not the
-          # product name; Tauri only renames it inside the installers.
-          exe=$(find target -path '*release/gamesync-app.exe' ! -path '*deps*' | head -n1)
-          if [ -z "$exe" ]; then echo "::error::portable gamesync-app.exe not found under target/"; exit 1; fi
-          out="GameSync_${ver}_${arch}-portable.exe"
-          cp "$exe" "$out"
-          gh release upload "${{ github.ref_name }}" "$out" --clobber
+            > These builds are unsigned, so on first launch Windows SmartScreen or
+            > macOS Gatekeeper may warn you. Choose **More info → Run anyway**
+            > (Windows) or right-click → **Open** (macOS).
