@@ -708,13 +708,30 @@ impl App {
                                                     );
                                                     if self.auto_sync.backup_on_exit {
                                                         if g.install_dir.is_some() {
-                                                            ui.label(
-                                                        RichText::new(
+                                                            ui.horizontal(|ui| {
+                                                                ui.spacing_mut().item_spacing.x =
+                                                                    5.0;
+                                                                let col = ui
+                                                                    .visuals()
+                                                                    .weak_text_color();
+                                                                let (r, _) = ui.allocate_exact_size(
+                                                                    egui::vec2(13.0, 13.0),
+                                                                    egui::Sense::hover(),
+                                                                );
+                                                                paint_autobackup_icon(
+                                                                    ui.painter(),
+                                                                    r.center(),
+                                                                    5.5,
+                                                                    col,
+                                                                );
+                                                                ui.label(
+                                                                    RichText::new(
                                                             "backs up automatically when it closes",
                                                         )
-                                                        .weak()
-                                                        .small(),
-                                                    );
+                                                                    .weak()
+                                                                    .small(),
+                                                                );
+                                                            });
                                                         } else if ui
                                                             .link(
                                                                 RichText::new(
@@ -946,6 +963,7 @@ impl App {
             .resizable(true)
             .default_width(580.0)
             .show(ctx, |ui| {
+                theme_modal_buttons(ui, self.accent());
                 if self.versions_for.as_deref() != Some(game.as_str()) {
                     ui.label("Loading…");
                 } else if self.versions.is_empty() {
@@ -1000,6 +1018,7 @@ impl App {
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
+                theme_modal_buttons(ui, self.accent());
                 ui.add(egui::TextEdit::singleline(&mut self.rename_buf).desired_width(260.0));
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
@@ -1041,6 +1060,7 @@ impl App {
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .frame(modal_frame(ctx))
             .show(ctx, |ui| {
+                theme_modal_buttons(ui, self.accent());
                 egui::ScrollArea::vertical()
                     .auto_shrink([false; 2])
                     .show(ui, |ui| {
@@ -1242,6 +1262,7 @@ impl App {
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .frame(modal_frame(ctx))
             .show(ctx, |ui| {
+                theme_modal_buttons(ui, self.accent());
                 ui.label(RichText::new("Pick a theme, or import your own.").weak());
                 ui.add_space(6.0);
                 // Pull the imported theme's swatch data out first so the closure
@@ -1449,6 +1470,7 @@ impl App {
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .frame(modal_frame(ctx))
             .show(ctx, |ui| {
+                theme_modal_buttons(ui, self.accent());
                 ui.label(
                     RichText::new(
                         "Encrypts all saved data at rest with a passphrase (zero-knowledge). \
@@ -1524,6 +1546,7 @@ impl App {
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .frame(modal_frame(ctx))
             .show(ctx, |ui| {
+                theme_modal_buttons(ui, self.accent());
                 ui.label(
                     RichText::new(
                         "This decrypts all stored saves back to plaintext on disk and removes \
@@ -1566,6 +1589,7 @@ impl App {
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
+                theme_modal_buttons(ui, self.accent());
                 ui.label("Track a game by its save folder:");
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
@@ -1615,6 +1639,7 @@ impl App {
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .frame(modal_frame(ctx))
             .show(ctx, |ui| {
+                theme_modal_buttons(ui, self.accent());
                 egui::ScrollArea::vertical()
                     .max_height(max_h)
                     .auto_shrink([false, true])
@@ -1721,6 +1746,7 @@ impl App {
             .resizable(true)
             .default_width(580.0)
             .show(ctx, |ui| {
+                theme_modal_buttons(ui, self.accent());
                 if self.files_for.as_deref() != Some(game.as_str()) {
                     ui.label("Loading…");
                 } else if self.files.is_empty() {
@@ -1758,6 +1784,7 @@ impl App {
             .resizable(true)
             .default_width(500.0)
             .show(ctx, |ui| {
+                theme_modal_buttons(ui, self.accent());
                 if let Some(d) = &self.diff_result {
                     if d.is_empty() {
                         ui.label(format!("No changes ({} files identical).", d.unchanged));
@@ -1808,6 +1835,7 @@ impl App {
             .resizable(true)
             .default_width(520.0)
             .show(ctx, |ui| {
+                theme_modal_buttons(ui, self.accent());
                 if let Some(pl) = &self.plugins {
                     ui.label(RichText::new(format!("Folder: {}", pl.dir)).weak());
                     let mut allowed = pl.commands_allowed;
@@ -1862,6 +1890,7 @@ impl App {
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
+                theme_modal_buttons(ui, self.accent());
                 ui.label(
                     "Encryption is enabled. This recovery key can unlock your saves if you \
                      forget the passphrase. It is shown only once:",
@@ -1894,6 +1923,7 @@ impl App {
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
+                theme_modal_buttons(ui, self.accent());
                 ui.label(format!("Remove \"{name}\" from GameSync?"));
                 ui.label(
                     RichText::new(
@@ -2380,6 +2410,21 @@ fn translucent_button_fills(ui: &mut egui::Ui) {
     }
 }
 
+/// Give the plain buttons inside a modal a themed tonal look — a faint accent
+/// fill and an accent-tinted border that brightens on hover — so they read as
+/// part of the theme instead of flat grey. Call once at the top of a modal
+/// body. Buttons that set their own `.fill()` (a primary accent button) override
+/// this and stay as-is.
+fn theme_modal_buttons(ui: &mut egui::Ui, accent: Color32) {
+    let w = &mut ui.visuals_mut().widgets;
+    w.inactive.weak_bg_fill = accent.gamma_multiply(0.12);
+    w.inactive.bg_stroke = egui::Stroke::new(1.0, accent.gamma_multiply(0.40));
+    w.hovered.weak_bg_fill = accent.gamma_multiply(0.22);
+    w.hovered.bg_stroke = egui::Stroke::new(1.3, accent.gamma_multiply(0.75));
+    w.active.weak_bg_fill = accent.gamma_multiply(0.32);
+    w.active.bg_stroke = egui::Stroke::new(1.3, accent);
+}
+
 fn tonal_button(ui: &mut egui::Ui, text: &str, accent: Color32, enabled: bool) -> egui::Response {
     let btn = egui::Button::new(RichText::new(text).color(accent))
         .fill(accent.gamma_multiply(0.10))
@@ -2464,6 +2509,35 @@ fn title_with_badge(ui: &mut egui::Ui, name: &str, platform: &str) {
     );
     ui.painter()
         .galley(egui::pos2(brect.left() + pad_x, cy - bg_h / 2.0), bg, color);
+}
+
+/// Hand-paint the auto-backup glyph: a circular refresh arrow (the shape of
+/// `assets/autobackup.svg`). egui can't render SVG, so we draw it directly with
+/// the painter — it stays crisp at any size and follows `color`.
+fn paint_autobackup_icon(painter: &egui::Painter, center: egui::Pos2, r: f32, color: Color32) {
+    use std::f32::consts::PI;
+    let stroke = egui::Stroke::new((r * 0.26).max(1.3), color);
+    let pt = |a: f32| egui::pos2(center.x + r * a.cos(), center.y + r * a.sin());
+    // A nearly-full circle (~310°) ending at the top (12 o'clock), with a small
+    // gap at the upper-right where the arrowhead sits — matching the ↻ glyph.
+    let a0 = -PI / 9.0;
+    let a1 = a0 + PI * 1.72;
+    let n = 48;
+    let arc: Vec<egui::Pos2> = (0..=n)
+        .map(|i| pt(a0 + (a1 - a0) * i as f32 / n as f32))
+        .collect();
+    painter.add(egui::Shape::line(arc, stroke));
+    // Arrowhead at the leading end (a1), a small chevron along the tangent.
+    let tip = pt(a1);
+    let dir = egui::vec2(-a1.sin(), a1.cos()); // clockwise tangent (travel dir)
+    let rot = |v: egui::Vec2, t: f32| {
+        egui::vec2(v.x * t.cos() - v.y * t.sin(), v.x * t.sin() + v.y * t.cos())
+    };
+    let h = r * 0.62;
+    let b1 = tip + rot(-dir, 0.6) * h;
+    let b2 = tip + rot(-dir, -0.6) * h;
+    painter.line_segment([tip, b1], stroke);
+    painter.line_segment([tip, b2], stroke);
 }
 
 /// A sliding on/off switch. Returns a response whose `.changed()` reflects toggles.
