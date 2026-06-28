@@ -1067,7 +1067,27 @@ impl App {
         // the inner ScrollArea keeps a tall settings list reachable when space
         // is tight (and the centered title bar stays visible).
         let sr = ctx.screen_rect();
-        let w = (sr.width() * 0.6).clamp(380.0, 680.0);
+        // Width: just enough to fit the four built-in theme swatches on one row
+        // (the widest content), plus the frame padding and the scrollbar.
+        let w = {
+            const PAD: f32 = 10.0;
+            const SWATCH_W: f32 = 44.0;
+            const GAP: f32 = 8.0;
+            let font = egui::TextStyle::Body.resolve(&ctx.style());
+            let spacing = ctx.style().spacing.item_spacing.x;
+            let mut row = 0.0_f32;
+            for (i, name) in ["Midnight", "Light", "Forest", "Grape"].iter().enumerate() {
+                let tw = ctx
+                    .fonts(|f| f.layout_no_wrap((*name).to_string(), font.clone(), Color32::WHITE))
+                    .size()
+                    .x;
+                if i > 0 {
+                    row += spacing;
+                }
+                row += PAD + SWATCH_W + GAP + tw + PAD;
+            }
+            row + 44.0 + 14.0
+        };
         let h = (sr.height() * 0.82).clamp(300.0, (sr.height() - 80.0).max(300.0));
         egui::Window::new("Settings")
             .open(&mut open)
@@ -1622,9 +1642,10 @@ impl App {
 
                 ui.label("Name");
                 ui.add_space(3.0);
-                ui.add(
+                ui.add_sized(
+                    egui::vec2(ui.available_width(), 32.0),
                     egui::TextEdit::singleline(&mut self.add_name)
-                        .desired_width(f32::INFINITY)
+                        .vertical_align(egui::Align::Center)
                         .hint_text("e.g. Voices of the Void"),
                 );
                 ui.add_space(12.0);
@@ -1632,10 +1653,16 @@ impl App {
                 ui.label("Save folder");
                 ui.add_space(3.0);
                 ui.horizontal(|ui| {
+                    // Match the field height to the Browse button (both 32px) so
+                    // they're the same size and line up.
+                    ui.spacing_mut().interact_size.y = 32.0;
+                    ui.spacing_mut().button_padding.y = 7.0;
                     let browse_w = 96.0;
-                    ui.add(
+                    let field_w = (ui.available_width() - browse_w).max(120.0);
+                    ui.add_sized(
+                        egui::vec2(field_w, 32.0),
                         egui::TextEdit::singleline(&mut self.add_path)
-                            .desired_width((ui.available_width() - browse_w).max(120.0))
+                            .vertical_align(egui::Align::Center)
                             .hint_text("Path to the save folder"),
                     );
                     if ui.button("Browse…").clicked() {
@@ -1887,11 +1914,27 @@ impl App {
             return;
         }
         let mut open = self.show_plugins;
+        // Width: fit the widest fixed line (the "Allow shell commands" checkbox)
+        // plus the checkbox, spacing and frame padding; the folder path wraps.
+        let w = {
+            let font = egui::TextStyle::Body.resolve(&ctx.style());
+            let tw = ctx
+                .fonts(|f| {
+                    f.layout_no_wrap(
+                        "Allow plugins to run shell commands (hooks & viewers)".to_string(),
+                        font,
+                        Color32::WHITE,
+                    )
+                })
+                .size()
+                .x;
+            tw + 24.0 + 44.0
+        };
         egui::Window::new("Plugins")
             .open(&mut open)
             .collapsible(false)
             .resizable(true)
-            .default_width(520.0)
+            .default_width(w)
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .frame(modal_frame(ctx))
             .show(ctx, |ui| {
