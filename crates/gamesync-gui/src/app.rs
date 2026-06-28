@@ -1572,93 +1572,104 @@ impl App {
             return;
         };
         let mut open = true;
+        let max_h = (ctx.screen_rect().height() - 120.0).max(280.0);
         egui::Window::new("Game settings")
             .open(&mut open)
             .collapsible(false)
-            .resizable(true)
-            .default_width(500.0)
+            .resizable(false)
+            .default_width(480.0)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .frame(modal_frame(ctx))
             .show(ctx, |ui| {
-                ui.heading("Extra backup folders");
-                ui.label(
-                    RichText::new("Backed up and restored together with the save folder.").weak(),
-                );
-                let mut remove_idx = None;
-                for (i, r) in self.gs_extra.iter().enumerate() {
-                    ui.horizontal(|ui| {
-                        if ui.small_button("✕").clicked() {
-                            remove_idx = Some(i);
+                egui::ScrollArea::vertical()
+                    .max_height(max_h)
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        ui.heading("Extra backup folders");
+                        ui.label(
+                            RichText::new("Backed up and restored together with the save folder.")
+                                .weak(),
+                        );
+                        let mut remove_idx = None;
+                        for (i, r) in self.gs_extra.iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                if ui.small_button("✕").clicked() {
+                                    remove_idx = Some(i);
+                                }
+                                ui.label(r.as_str());
+                            });
                         }
-                        ui.label(r.as_str());
-                    });
-                }
-                if let Some(i) = remove_idx {
-                    self.gs_extra.remove(i);
-                }
-                ui.horizontal(|ui| {
-                    if ui.button("Add folder…").clicked() {
-                        if let Some(p) = rfd::FileDialog::new().pick_folder() {
-                            self.gs_extra.push(p.display().to_string());
+                        if let Some(i) = remove_idx {
+                            self.gs_extra.remove(i);
                         }
-                    }
-                    if ui.button("Save extra folders").clicked() {
-                        let roots: Vec<PathBuf> = self
-                            .gs_extra
-                            .iter()
-                            .map(|s| PathBuf::from(s.as_str()))
-                            .collect();
-                        let _ = tx.send(Cmd::SetExtraRoots {
-                            id: id.clone(),
-                            roots,
+                        ui.horizontal(|ui| {
+                            if ui.button("Add folder…").clicked() {
+                                if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                                    self.gs_extra.push(p.display().to_string());
+                                }
+                            }
+                            if ui.button("Save extra folders").clicked() {
+                                let roots: Vec<PathBuf> = self
+                                    .gs_extra
+                                    .iter()
+                                    .map(|s| PathBuf::from(s.as_str()))
+                                    .collect();
+                                let _ = tx.send(Cmd::SetExtraRoots {
+                                    id: id.clone(),
+                                    roots,
+                                });
+                            }
                         });
-                    }
-                });
 
-                ui.separator();
-                ui.heading("Close-detection location");
-                ui.label(
+                        ui.separator();
+                        ui.heading("Close-detection location");
+                        ui.label(
                     RichText::new(
                         "The game's install folder; GameSync watches it to back up automatically \
                          a few seconds after the game exits.",
                     )
                     .weak(),
                 );
-                ui.horizontal(|ui| {
-                    ui.add(egui::TextEdit::singleline(&mut self.gs_exe).desired_width(300.0));
-                    if ui.button("Browse…").clicked() {
-                        if let Some(p) = rfd::FileDialog::new().pick_folder() {
-                            self.gs_exe = p.display().to_string();
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.gs_exe).desired_width(300.0),
+                            );
+                            if ui.button("Browse…").clicked() {
+                                if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                                    self.gs_exe = p.display().to_string();
+                                }
+                            }
+                        });
+                        if ui.button("Save location").clicked() {
+                            let path = if self.gs_exe.trim().is_empty() {
+                                None
+                            } else {
+                                Some(PathBuf::from(self.gs_exe.trim()))
+                            };
+                            let _ = tx.send(Cmd::SetGameExe {
+                                id: id.clone(),
+                                path,
+                            });
                         }
-                    }
-                });
-                if ui.button("Save location").clicked() {
-                    let path = if self.gs_exe.trim().is_empty() {
-                        None
-                    } else {
-                        Some(PathBuf::from(self.gs_exe.trim()))
-                    };
-                    let _ = tx.send(Cmd::SetGameExe {
-                        id: id.clone(),
-                        path,
-                    });
-                }
 
-                ui.separator();
-                ui.heading("Redirect save folder");
-                ui.label(
+                        ui.separator();
+                        ui.heading("Redirect save folder");
+                        ui.label(
                     RichText::new(
                         "Move this game's saves into a synced folder (e.g. OneDrive) and leave a \
                          link behind, so they sync even when GameSync isn't running.",
                     )
                     .weak(),
                 );
-                if ui.button("Choose target & redirect…").clicked() {
-                    if let Some(p) = rfd::FileDialog::new().pick_folder() {
-                        let _ = tx.send(Cmd::Redirect {
-                            id: id.clone(),
-                            target: p,
-                        });
-                    }
-                }
+                        if ui.button("Choose target & redirect…").clicked() {
+                            if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                                let _ = tx.send(Cmd::Redirect {
+                                    id: id.clone(),
+                                    target: p,
+                                });
+                            }
+                        }
+                    });
             });
         if !open {
             self.gs_game = None;
