@@ -973,6 +973,8 @@ impl App {
             .collapsible(false)
             .resizable(true)
             .default_width(580.0)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .frame(modal_frame(ctx))
             .show(ctx, |ui| {
                 theme_modal_buttons(ui, self.accent());
                 if self.versions_for.as_deref() != Some(game.as_str()) {
@@ -1028,6 +1030,9 @@ impl App {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
+            .default_width(320.0)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .frame(modal_frame(ctx))
             .show(ctx, |ui| {
                 theme_modal_buttons(ui, self.accent());
                 ui.add(egui::TextEdit::singleline(&mut self.rename_buf).desired_width(260.0));
@@ -1676,7 +1681,9 @@ impl App {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
-            .default_width(480.0)
+            // Sized to the widest row (the close-detection input + Browse button)
+            // plus the frame padding, so there isn't a lot of empty space.
+            .default_width(444.0)
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .frame(modal_frame(ctx))
             .show(ctx, |ui| {
@@ -1731,8 +1738,14 @@ impl App {
                     .weak(),
                 );
                         ui.horizontal(|ui| {
-                            ui.add(
-                                egui::TextEdit::singleline(&mut self.gs_exe).desired_width(300.0),
+                            // Match the field height to the Browse button (both
+                            // 32px) so they're the same size and line up.
+                            ui.spacing_mut().interact_size.y = 32.0;
+                            ui.spacing_mut().button_padding.y = 7.0;
+                            ui.add_sized(
+                                egui::vec2(300.0, 32.0),
+                                egui::TextEdit::singleline(&mut self.gs_exe)
+                                    .vertical_align(egui::Align::Center),
                             );
                             if ui.button("Browse…").clicked() {
                                 if let Some(p) = rfd::FileDialog::new().pick_folder() {
@@ -1786,6 +1799,8 @@ impl App {
             .collapsible(false)
             .resizable(true)
             .default_width(580.0)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .frame(modal_frame(ctx))
             .show(ctx, |ui| {
                 theme_modal_buttons(ui, self.accent());
                 if self.files_for.as_deref() != Some(game.as_str()) {
@@ -1824,6 +1839,8 @@ impl App {
             .collapsible(false)
             .resizable(true)
             .default_width(500.0)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .frame(modal_frame(ctx))
             .show(ctx, |ui| {
                 theme_modal_buttons(ui, self.accent());
                 if let Some(d) = &self.diff_result {
@@ -1875,6 +1892,8 @@ impl App {
             .collapsible(false)
             .resizable(true)
             .default_width(520.0)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .frame(modal_frame(ctx))
             .show(ctx, |ui| {
                 theme_modal_buttons(ui, self.accent());
                 if let Some(pl) = &self.plugins {
@@ -1930,6 +1949,9 @@ impl App {
         egui::Window::new("Recovery key — write this down")
             .collapsible(false)
             .resizable(false)
+            .default_width(420.0)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .frame(modal_frame(ctx))
             .show(ctx, |ui| {
                 theme_modal_buttons(ui, self.accent());
                 ui.label(
@@ -1963,6 +1985,9 @@ impl App {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
+            .default_width(360.0)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .frame(modal_frame(ctx))
             .show(ctx, |ui| {
                 theme_modal_buttons(ui, self.accent());
                 ui.label(format!("Remove \"{name}\" from GameSync?"));
