@@ -424,6 +424,11 @@ impl App {
                             self.show_plugins = true;
                             let _ = tx.send(Cmd::ListPlugins);
                         }
+                        // Toggle the library controls row (game count + sort + filter).
+                        // A plain button so it matches the others in the bar.
+                        if ui.button("Filters").clicked() {
+                            self.show_filters = !self.show_filters;
+                        }
                         if ui.button("Add game").clicked() {
                             self.show_add = true;
                         }
@@ -452,8 +457,6 @@ impl App {
                         if sync.clicked() {
                             let _ = tx.send(Cmd::SyncAll);
                         }
-                        // Toggle the library controls row (game count + sort + filter).
-                        ui.toggle_value(&mut self.show_filters, "Filters");
                     });
                 });
             });
