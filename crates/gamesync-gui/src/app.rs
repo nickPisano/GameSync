@@ -754,18 +754,20 @@ impl App {
                                                         if ui
                                                             .link(
                                                                 RichText::new("Rename")
-                                                                    .color(accent),
+                                                                    .color(accent)
+                                                                    .small(),
                                                             )
                                                             .clicked()
                                                         {
                                                             self.renaming = Some(g.id.clone());
                                                             self.rename_buf = g.name.clone();
                                                         }
-                                                        ui.label(RichText::new("·").weak());
+                                                        ui.label(RichText::new("·").weak().small());
                                                         if ui
                                                             .link(
                                                                 RichText::new("Settings")
-                                                                    .color(accent),
+                                                                    .color(accent)
+                                                                    .small(),
                                                             )
                                                             .clicked()
                                                         {
@@ -781,11 +783,12 @@ impl App {
                                                                 .map(|p| p.display().to_string())
                                                                 .unwrap_or_default();
                                                         }
-                                                        ui.label(RichText::new("·").weak());
+                                                        ui.label(RichText::new("·").weak().small());
                                                         if ui
                                                         .link(
                                                             RichText::new("Redirect to synced folder")
-                                                                .color(accent),
+                                                                .color(accent)
+                                                                .small(),
                                                         )
                                                         .on_hover_text(
                                                             "Move this save folder into a synced \
@@ -807,15 +810,15 @@ impl App {
                                                             });
                                                         }
                                                     }
-                                                        ui.label(RichText::new("·").weak());
+                                                        ui.label(RichText::new("·").weak().small());
                                                         if ui
                                                             .add(
                                                                 egui::Label::new(
-                                                                    RichText::new("Remove").color(
-                                                                        Color32::from_rgb(
+                                                                    RichText::new("Remove")
+                                                                        .color(Color32::from_rgb(
                                                                             0xe0, 0x6c, 0x6c,
-                                                                        ),
-                                                                    ),
+                                                                        ))
+                                                                        .small(),
                                                                 )
                                                                 .sense(egui::Sense::click()),
                                                             )
