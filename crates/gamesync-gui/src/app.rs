@@ -748,12 +748,24 @@ impl App {
                                                     }
                                                     ui.add_space(1.0);
                                                     ui.horizontal(|ui| {
-                                                        if ui.link("Rename").clicked() {
+                                                        if ui
+                                                            .link(
+                                                                RichText::new("Rename")
+                                                                    .color(accent),
+                                                            )
+                                                            .clicked()
+                                                        {
                                                             self.renaming = Some(g.id.clone());
                                                             self.rename_buf = g.name.clone();
                                                         }
                                                         ui.label(RichText::new("·").weak());
-                                                        if ui.link("Settings").clicked() {
+                                                        if ui
+                                                            .link(
+                                                                RichText::new("Settings")
+                                                                    .color(accent),
+                                                            )
+                                                            .clicked()
+                                                        {
                                                             self.gs_game = Some(g.id.clone());
                                                             self.gs_extra = g
                                                                 .extra_roots
@@ -768,7 +780,10 @@ impl App {
                                                         }
                                                         ui.label(RichText::new("·").weak());
                                                         if ui
-                                                        .link("Redirect to synced folder")
+                                                        .link(
+                                                            RichText::new("Redirect to synced folder")
+                                                                .color(accent),
+                                                        )
                                                         .on_hover_text(
                                                             "Move this save folder into a synced \
                                                              folder (e.g. OneDrive) and leave a \
