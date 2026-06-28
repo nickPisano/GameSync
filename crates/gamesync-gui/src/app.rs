@@ -718,7 +718,7 @@ impl App {
                                                         } else if ui
                                                             .link(
                                                                 RichText::new(
-                                                                    "Set up auto-backup on exit…",
+                                                                    "+ set up auto-backup on close",
                                                                 )
                                                                 .color(accent)
                                                                 .small(),
