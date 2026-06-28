@@ -655,7 +655,7 @@ impl App {
                             let card = egui::Frame::group(ui.style())
                                 .fill(card_fill)
                                 .corner_radius(egui::CornerRadius::same(15))
-                                .inner_margin(egui::Margin::same(16))
+                                .inner_margin(egui::Margin::same(20))
                                 .show(ui, |ui| {
                                     // Split the row into a left column + a fixed-width right
                                     // column, accounting for the horizontal item spacing so the
@@ -674,10 +674,10 @@ impl App {
                                                 egui::Layout::top_down(egui::Align::Min),
                                                 |ui| {
                                                     ui.set_width(left_w);
-                                                    // Tighten the line spacing to match the
-                                                    // web build's compact card (path/meta
-                                                    // lines are 4–5px apart, not egui's 6px).
-                                                    ui.spacing_mut().item_spacing.y = 4.0;
+                                                    // Roomier line spacing between the
+                                                    // path/meta lines so the card breathes
+                                                    // and is a bit taller.
+                                                    ui.spacing_mut().item_spacing.y = 7.0;
                                                     title_with_badge(
                                                         ui,
                                                         g.name.as_str(),
@@ -685,7 +685,7 @@ impl App {
                                                     );
                                                     // A touch more breathing room
                                                     // between the title and the path.
-                                                    ui.add_space(2.0);
+                                                    ui.add_space(5.0);
                                                     ui.label(
                                                         RichText::new(
                                                             g.save_root.display().to_string(),
