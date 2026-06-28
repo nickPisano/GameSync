@@ -590,8 +590,19 @@ impl App {
                 SortKey::Name => ga.name.to_lowercase().cmp(&gb.name.to_lowercase()),
             }
         });
+        // Custom frame: full top/side padding, but a small bottom margin so the
+        // card list extends down to the status bar instead of stopping short
+        // (which left a gap that looked like the cards were cut off early).
+        let lib_frame = egui::Frame::default()
+            .fill(ctx.style().visuals.panel_fill)
+            .inner_margin(egui::Margin {
+                left: 22,
+                right: 22,
+                top: 20,
+                bottom: 4,
+            });
         egui::CentralPanel::default()
-            .frame(panel_frame(ctx, 20))
+            .frame(lib_frame)
             .show(ctx, |ui| {
                 // The game count + sort + filter live behind the topbar "Filters"
                 // toggle, so the library view is uncluttered by default.
@@ -1110,6 +1121,10 @@ impl App {
                             .checkbox(&mut s.enabled, "Automatic background sync")
                             .changed();
                         ui.horizontal(|ui| {
+                            // Trim the field's vertical padding so the box height
+                            // is close to the label text — otherwise the tall
+                            // field looks vertically offset from "Every/minutes".
+                            ui.spacing_mut().button_padding.y = 2.0;
                             ui.label("Every");
                             changed |= ui
                                 .add(egui::DragValue::new(&mut s.interval_min).range(1..=1440))
@@ -1588,37 +1603,63 @@ impl App {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
+            .default_width(420.0)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .frame(modal_frame(ctx))
             .show(ctx, |ui| {
-                theme_modal_buttons(ui, self.accent());
-                ui.label("Track a game by its save folder:");
-                ui.add_space(4.0);
+                let accent = self.accent();
+                theme_modal_buttons(ui, accent);
+                // Constrain the content width so the INFINITY-width fields don't
+                // balloon the auto-sizing window past `default_width`.
+                ui.set_width(376.0);
+                ui.label(RichText::new("Track a game by its save folder.").weak());
+                ui.add_space(14.0);
+
+                ui.label("Name");
+                ui.add_space(3.0);
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.add_name)
+                        .desired_width(f32::INFINITY)
+                        .hint_text("e.g. Voices of the Void"),
+                );
+                ui.add_space(12.0);
+
+                ui.label("Save folder");
+                ui.add_space(3.0);
                 ui.horizontal(|ui| {
-                    ui.label("Name");
-                    ui.add(egui::TextEdit::singleline(&mut self.add_name).desired_width(240.0));
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Folder");
-                    ui.add(egui::TextEdit::singleline(&mut self.add_path).desired_width(240.0));
+                    let browse_w = 96.0;
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.add_path)
+                            .desired_width((ui.available_width() - browse_w).max(120.0))
+                            .hint_text("Path to the save folder"),
+                    );
                     if ui.button("Browse…").clicked() {
                         if let Some(p) = rfd::FileDialog::new().pick_folder() {
                             self.add_path = p.display().to_string();
                         }
                     }
                 });
-                ui.add_space(6.0);
-                if ui.button("Add").clicked() {
-                    let name = self.add_name.trim().to_string();
-                    let path = self.add_path.trim().to_string();
-                    if !name.is_empty() && !path.is_empty() {
-                        let _ = tx.send(Cmd::AddManual {
-                            name,
-                            path: PathBuf::from(path),
-                        });
-                        self.add_name.clear();
-                        self.add_path.clear();
-                        self.show_add = false;
-                    }
-                }
+                ui.add_space(18.0);
+
+                let can_add = !self.add_name.trim().is_empty() && !self.add_path.trim().is_empty();
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let add = ui.add_enabled(
+                            can_add,
+                            egui::Button::new(RichText::new("Add").color(Color32::WHITE))
+                                .fill(accent),
+                        );
+                        if add.clicked() {
+                            let _ = tx.send(Cmd::AddManual {
+                                name: self.add_name.trim().to_string(),
+                                path: PathBuf::from(self.add_path.trim()),
+                            });
+                            self.add_name.clear();
+                            self.add_path.clear();
+                            self.show_add = false;
+                        }
+                    });
+                });
             });
         if !open {
             self.show_add = false;
