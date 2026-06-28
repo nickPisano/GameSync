@@ -1002,21 +1002,8 @@ impl App {
                         // Top-align so every swatch cell shares one baseline (a
                         // plain/centered row lets them drift down to the left).
                         ui.horizontal_top(|ui| {
-                            // Auto: follow the OS light/dark setting.
-                            let auto_accent = resolve_auto(ui.ctx()).accent();
-                            if let ThemePick::Select = theme_choice(
-                                ui,
-                                "Auto",
-                                None,
-                                auto_accent,
-                                None,
-                                self.use_auto,
-                                false,
-                            ) {
-                                self.use_auto = true;
-                                self.use_custom = false;
-                                self.theme_dirty = true;
-                            }
+                            // The built-in themes; "Auto" lives in the full
+                            // gallery ("Show all themes…") below.
                             for t in Theme::ALL {
                                 let selected =
                                     !self.use_auto && !self.use_custom && self.theme == t;
@@ -1042,7 +1029,7 @@ impl App {
                                 self.show_themes = true;
                             }
                             ui.label(
-                                RichText::new("Custom imports & the full gallery")
+                                RichText::new("Auto, custom imports & the full gallery")
                                     .weak()
                                     .small(),
                             );
